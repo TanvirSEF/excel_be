@@ -745,6 +745,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=30
 ALGORITHM=HS256
 
+# Bootstrap admin (used once on first boot; skipped if a super admin exists)
+FIRST_ADMIN_EMAIL=
+FIRST_ADMIN_PASSWORD=
+
 # Database
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/excel_insider
 DB_POOL_SIZE=10
@@ -870,7 +874,7 @@ Internet → Dokploy (Traefik: TLS, routing, redeploys) → app container (Uvico
 
 ### 16.1 App service
 
-- Service type: **Docker**, built from the repo-root `Dockerfile` — single container running `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Service type: **Docker**, built from the repo-root `Dockerfile` — the entrypoint runs `alembic upgrade head`, then the idempotent super-admin seed (`python -m app.core.seed`), then starts `uvicorn app.main:app --host 0.0.0.0 --port 8000`, so every deploy applies pending migrations before serving traffic
 - No Nginx config of our own: Dokploy's built-in Traefik handles reverse proxy, Let's Encrypt TLS, and automatic redeploys on git push
 - Health check path `/health` (must check DB **and** Redis — see §16.4); Dokploy restarts unhealthy containers
 - Set Dokploy's max request body size to 25M for media uploads
@@ -901,7 +905,7 @@ Matches the client-facing timeline's Week 1–2, but broken into daily-buildable
 
 1. **Scaffold** — project structure, `config.py`, `database.py`, Docker Compose (Postgres + Redis running locally)
 2. **Models + Alembic** — all tables from §4, first migration, verify schema in a DB client
-3. **Auth module** — register (seed a Super Admin manually), login, refresh, logout, forgot/reset/change password (email via SMTP), email verification, `get_current_user` dependency, `require_role()` dependency
+3. **Auth module** — register (Super Admin auto-seeds from `FIRST_ADMIN_*` env on first boot), login, refresh, logout, forgot/reset/change password (email via SMTP), email verification, `get_current_user` dependency, `require_role()` dependency
 4. **Categories module** — full CRUD + reorder endpoint + tree-building query + Redis caching
 5. **Posts module (core)** — CRUD, status transitions, slug generation/uniqueness, RBAC per §5.3
 6. **Tags + Comments modules**

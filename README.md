@@ -43,7 +43,10 @@ Interactive docs live at http://127.0.0.1:8000/docs, health check at /health.
 ```bash
 alembic revision --autogenerate -m "create users table"
 alembic upgrade head
+python -m app.core.seed
 ```
+
+The seed creates the first Super Admin from `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` and is skipped if one already exists. In production the container entrypoint runs all three automatically on every deploy.
 
 ## Tests
 
