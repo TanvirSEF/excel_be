@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import uuid4
 
 import jwt
@@ -14,6 +15,10 @@ REFRESH = "refresh"
 
 def hash_password(password: str) -> str:
     return password_hash.hash(password)
+
+
+def hash_token(token: str) -> str:
+    return sha256(token.encode()).hexdigest()
 
 
 def verify_password(password: str, hashed: str) -> bool:
