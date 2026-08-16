@@ -22,7 +22,7 @@
 13. [Error Handling Standard](#13-error-handling-standard)
 14. [Security Checklist](#14-security-checklist)
 15. [Testing Strategy](#15-testing-strategy)
-16. [Deployment (Contabo VPS)](#16-deployment-contabo-vps)
+16. [Deployment (Dokploy)](#16-deployment-dokploy)
 17. [Build Order / Milestones](#17-build-order--milestones)
 
 ---
@@ -39,7 +39,7 @@ This backend must:
 - Support full-text search across articles
 - Track analytics (views, trending posts)
 - Safely import ~1,900+ existing WordPress posts with zero broken URLs
-- Run reliably on a single **Contabo VPS** (not serverless) — so the design favors a monolithic-but-modular FastAPI app over microservices
+- Run reliably on a single server managed by **Dokploy** (not serverless) — so the design favors a monolithic-but-modular FastAPI app over microservices
 
 ---
 
@@ -53,14 +53,15 @@ This backend must:
 | Database | **PostgreSQL 16** | JSONB for block-editor content, native full-text search, mature, works great on a single VPS |
 | Migrations | **Alembic** | Standard companion to SQLAlchemy; version-controlled schema changes |
 | Cache/Session | **Redis 7** | Query caching, rate limiting, session/refresh-token blacklist |
-| Auth | **OAuth2 Password Flow + JWT** (via `python-jose` or `PyJWT`) | Access + refresh token rotation |
-| Password Hashing | **Argon2** (via `passlib[argon2]`) | Stronger than bcrypt, recommended by OWASP as of 2024+ |
+| Auth | **OAuth2 Password Flow + JWT** via `PyJWT` | Access + refresh token rotation; PyJWT is the actively maintained choice |
+| Password Hashing | **Argon2** (via `pwdlib[argon2]`) | Stronger than bcrypt, recommended by OWASP; `pwdlib` replaces the unmaintained `passlib` (broken on Python 3.13+) |
+| Email | **aiosmtplib** (SMTP) | Transactional mail (password reset, verification, unsubscribe links) via any provider — Postmark, SES, Resend SMTP |
 | Validation | **Pydantic v2** | Ships with FastAPI, fast (Rust core), clean schema definitions |
 | Search | **PostgreSQL Full-Text Search** (`tsvector` + GIN index) to start; upgrade path to **Meilisearch** later | One less service to run on a single VPS; Postgres FTS is genuinely fast enough for ~2,000 articles |
 | Object Storage | **Cloudflare R2** (S3-compatible) via `boto3` | No egress fees, cheaper than S3 |
 | Background Jobs | **APScheduler** (in-process) to start; upgrade path to **Celery + Redis** if load grows | Avoids running a separate worker + broker on a single VPS for a site this size |
-| Server | **Uvicorn** workers behind **Gunicorn**, reverse-proxied by **Nginx** | Standard production FastAPI deployment |
-| Containerization | **Docker + Docker Compose** | Reproducible deploys on the Contabo VPS |
+| Server | **Uvicorn** in a Docker container, reverse-proxied by **Dokploy's Traefik** | TLS termination, routing and git-push deploys handled by Dokploy |
+| Containerization | **Docker** (root `Dockerfile`) deployed via **Dokploy** | Reproducible builds; Postgres + Redis run as separate Dokploy services. Compose stays for local dev only |
 
 ### Why SQLAlchemy 2.0 (async) over alternatives
 
@@ -133,6 +134,7 @@ excel-insider-backend/
 │   │   ├── media_service.py
 │   │   ├── search_service.py
 │   │   ├── seo_service.py           # sitemap.xml, OG image trigger, JSON-LD
+│   │   ├── email_service.py          # transactional SMTP (reset links, unsubscribe)
 │   │   └── analytics_service.py
 │   │
 │   ├── deps/                        # FastAPI dependencies
@@ -143,7 +145,8 @@ excel-insider-backend/
 │   │   ├── scheduler.py
 │   │   ├── trending_calculator.py
 │   │   ├── sitemap_regenerator.py
-│   │   └── view_count_flusher.py
+│   │   ├── view_count_flusher.py
+│   │   └── scheduled_publisher.py
 │   │
 │   └── utils/
 │       ├── slugify.py
@@ -167,12 +170,11 @@ excel-insider-backend/
 │   ├── test_categories.py
 │   └── test_rbac.py
 │
-├── docker/
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── nginx.conf
-│
 ├── .env.example
+├── .gitignore
+├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml           # local dev only: Postgres + Redis
 ├── alembic.ini
 ├── requirements.txt
 └── README.md
@@ -250,7 +252,7 @@ excel-insider-backend/
 | content_tsv | TSVECTOR | GENERATED — for full-text search (see §8) |
 | featured_image_url | TEXT | NULLABLE |
 | author_id | UUID | FK → users.id |
-| category_id | UUID | FK → categories.id |
+| category_id | UUID | FK → categories.id, NULLABLE (drafts may be uncategorized) |
 | status | ENUM | `draft`, `pending_review`, `published`, `rejected`, `scheduled` |
 | view_count | INTEGER | DEFAULT 0 |
 | is_trending | BOOLEAN | DEFAULT false |
@@ -264,6 +266,7 @@ excel-insider-backend/
 | scheduled_at | TIMESTAMPTZ | NULLABLE |
 | created_at | TIMESTAMPTZ | DEFAULT now() |
 | updated_at | TIMESTAMPTZ | DEFAULT now() |
+| deleted_at | TIMESTAMPTZ | NULLABLE — soft delete marker; all queries filter `deleted_at IS NULL` |
 
 **Indexes:** unique on `slug`, index on `status`, index on `category_id`, index on `author_id`, index on `published_at DESC`, **GIN index on `content_tsv`**, index on `is_trending`
 
@@ -422,11 +425,14 @@ comments ──< comments (self, parent_id — nested replies)
 {
   "sub": "<user_id>",
   "role": "senior_editor",
+  "jti": "<uuid4>",
   "exp": 1234567890,
   "iat": 1234567000,
   "type": "access"
 }
 ```
+
+The `jti` (JWT ID) claim backs the `revoked:{token_id}` revocation cache in §7.
 
 ### 5.3 Role Permission Matrix
 
@@ -471,7 +477,7 @@ For **object-level** rules (e.g. "Technical Writer can edit only their own draft
 
 ### 5.5 Password Handling
 
-- Hash with **Argon2** (`passlib.context.CryptContext(schemes=["argon2"])`)
+- Hash with **Argon2** (`pwdlib.PasswordHash.recommended()` — argon2id)
 - Minimum password policy: 10+ characters, enforced client-side and server-side
 - Rate-limit `/auth/login` to 5 attempts / 15 min per IP (via Redis, see §14)
 
@@ -479,7 +485,7 @@ For **object-level** rules (e.g. "Technical Writer can edit only their own draft
 
 ## 6. API Endpoint Specification
 
-Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` pagination and return the shape defined in `schemas/common.py`:
+Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` pagination (`page_size` capped at 50, default 20) and return the shape defined in `schemas/common.py`:
 
 ```json
 {
@@ -500,6 +506,10 @@ Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` paginati
 | POST | `/auth/refresh` | Refresh token | Rotate tokens |
 | POST | `/auth/logout` | Access token | Revoke refresh token |
 | GET | `/auth/me` | Access token | Current user profile |
+| POST | `/auth/forgot-password` | Public (rate-limited) | Email a reset link; always returns 200 to prevent user enumeration |
+| POST | `/auth/reset-password` | Public (rate-limited) | Set new password via emailed token; revokes all of the user's refresh tokens |
+| POST | `/auth/change-password` | Access token | Verify current password, set new one, revoke other sessions |
+| POST | `/auth/verify-email` | Public | Mark `is_verified = true` using the token from the verification email |
 
 ### 6.2 Users
 
@@ -520,6 +530,8 @@ Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` paginati
 | PATCH | `/categories/{id}` | Editor+ | Update |
 | PATCH | `/categories/reorder` | Editor+ | Bulk drag-drop reorder (accepts array of `{id, order_index, parent_id}`) |
 | DELETE | `/categories/{id}` | Super Admin | Delete (blocked if posts exist under it) |
+
+Route order matters: declare `/categories/reorder` before `/categories/{id}`, or FastAPI will match the literal `reorder` as an `{id}`.
 
 ### 6.4 Posts
 
@@ -561,32 +573,41 @@ Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` paginati
 | GET | `/media` | Writer+ | Browse library, filter by folder |
 | DELETE | `/media/{id}` | Editor+ | Delete (blocks if referenced by a published post) |
 
-### 6.8 Search
+### 6.8 Downloadable Assets
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/posts/{id}/assets` | Writer+ | Attach `.xlsx`/`.csv` — stored as-is under the `/downloads/` prefix (§9) |
+| GET | `/posts/{id}/assets` | Public | List a post's downloadable files |
+| GET | `/assets/{id}/download` | Public | Issue a short-lived signed R2 URL, increments `download_count` |
+| DELETE | `/assets/{id}` | Editor+ | Remove asset |
+
+### 6.9 Search
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/search?q=` | Public | Full-text search across title/excerpt/content, typo-tolerant (see §8) |
 
-### 6.9 Analytics
+### 6.10 Analytics
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/analytics/posts/{id}` | Own post (Writer) or Editor+ | Views over time, referrers |
 | GET | `/analytics/overview` | Editor+ / SEO Specialist | Site-wide trending, top posts, traffic summary |
 
-### 6.10 Newsletter
+### 6.11 Newsletter
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/newsletter/subscribe` | Public (rate-limited) | Add subscriber, sync to ESP async |
 | POST | `/newsletter/unsubscribe` | Public (token-based, from email link) | |
 
-### 6.11 SEO / System
+### 6.12 SEO / System
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/sitemap.xml` | Public | Auto-generated, cached, invalidated on publish |
-| GET | `/redirects/{old_path}` | Public/internal | Lookup for Next.js middleware 301 handling |
+| GET | `/redirects/{old_path:path}` | Public/internal | Lookup for Next.js middleware 301 handling — the `:path` converter lets WordPress paths containing slashes match |
 
 ---
 
@@ -602,7 +623,7 @@ Base path: `/api/v1`. All list endpoints support `?page=1&page_size=20` paginati
 | Refresh-token revocation check | `revoked:{token_id}` | Matches token TTL | Set on logout |
 | View counting buffer | `views:pending:{post_id}` | Flushed every 60s | Background job increments DB then clears |
 
-**View counting pattern (important for accuracy under load):** don't `UPDATE posts SET view_count = view_count + 1` on every single request — instead `INCR` a Redis counter per post, and a background job (§10) flushes accumulated counts to Postgres every 60 seconds. This avoids row-lock contention on popular posts.
+**View counting pattern (important for accuracy under load):** don't `UPDATE posts SET view_count = view_count + 1` on every single request — instead `INCR` a Redis counter per post, and a background job (§10) flushes accumulated counts to Postgres every 60 seconds. This avoids row-lock contention on popular posts. Skip counting for obvious bots/crawlers (user-agent check) so analytics stay honest.
 
 ---
 
@@ -662,6 +683,7 @@ Using **APScheduler** in-process (simplest reliable option for a single-VPS depl
 | Job | Schedule | Purpose |
 |---|---|---|
 | `flush_view_counts` | Every 60s | Moves Redis view counters into `posts.view_count` + inserts `post_views` rows |
+| `publish_scheduled_posts` | Every minute | Flips `scheduled` posts with `scheduled_at <= now()` to `published`, sets `published_at`, triggers sitemap regen + cache invalidation |
 | `calculate_trending` | Every 30 min | Recomputes "Last 7 Days" velocity ranking → updates `is_trending` flags → refreshes `posts:trending` cache |
 | `regenerate_sitemap` | On publish event + every 6h as fallback | Rebuilds `sitemap.xml`, invalidates CDN cache |
 | `cleanup_expired_tokens` | Daily | Deletes expired/revoked rows from `refresh_tokens` |
@@ -749,6 +771,16 @@ MAILCHIMP_LIST_ID=
 RATE_LIMIT_LOGIN=5/15minutes
 RATE_LIMIT_COMMENT=3/10minutes
 RATE_LIMIT_NEWSLETTER=5/1hour
+
+# Transactional email
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+EMAIL_FROM="Excel Insider <no-reply@excelinsider.com>"
+
+# Links
+FRONTEND_URL=https://excelinsider.com
 ```
 
 Load via `pydantic-settings` (`BaseSettings` subclass in `core/config.py`) — never read `os.environ` directly elsewhere in the app.
@@ -783,6 +815,8 @@ class AppException(Exception):
 
 Use specific subclasses: `NotFoundException`, `PermissionDeniedException`, `ValidationException`, `ConflictException` (e.g. duplicate slug).
 
+Also register a handler for FastAPI's `RequestValidationError` (422) that maps Pydantic errors into the same envelope — otherwise body-validation errors leak FastAPI's default `detail` array shape and break the contract.
+
 ---
 
 ## 14. Security Checklist
@@ -790,11 +824,11 @@ Use specific subclasses: `NotFoundException`, `PermissionDeniedException`, `Vali
 - [ ] **Rate limiting** on `/auth/login`, `/comments`, `/newsletter/subscribe` via Redis (sliding window or token bucket)
 - [ ] **CORS** locked to the known Next.js frontend origin(s) only — no wildcard `*` in production
 - [ ] **SQL injection** — non-issue by default since SQLAlchemy parameterizes all queries; never use raw string-interpolated SQL
-- [ ] **XSS** — sanitize any HTML rendered from `content_json` → `content_html` on the server (use `bleach` or similar) before storing/serving
+- [ ] **XSS** — sanitize any HTML rendered from `content_json` → `content_html` on the server (use `nh3`, the maintained Rust successor to the archived `bleach`) before storing/serving
 - [ ] **Input validation** — every request body validated via Pydantic schemas; reject unknown fields (`model_config = ConfigDict(extra="forbid")`)
 - [ ] **File upload validation** — check MIME type + magic bytes (not just extension) before processing uploads; cap file size (e.g. 10MB images, 25MB downloadable assets)
-- [ ] **Secrets** — never commit `.env`; use Contabo VPS environment injection or a secrets manager
-- [ ] **HTTPS only** — enforced at the Nginx layer, HSTS header enabled
+- [ ] **Secrets** — never commit `.env`; inject via Dokploy's environment variables
+- [ ] **HTTPS only** — terminated by Dokploy's Traefik; add an HSTS header in app middleware
 - [ ] **Refresh token rotation** — every refresh issues a new token and revokes the old one (limits replay window)
 - [ ] **Audit logging** — every publish/delete/role-change action recorded in `audit_logs`
 - [ ] **Dependency scanning** — run `pip-audit` in CI before each deploy
@@ -818,70 +852,46 @@ Use specific subclasses: `NotFoundException`, `PermissionDeniedException`, `Vali
 @pytest.fixture
 async def writer_client(test_app, seed_users):
     token = create_access_token(seed_users["writer"])
-    async with AsyncClient(app=test_app, base_url="http://test") as c:
+    transport = httpx.ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
         c.headers["Authorization"] = f"Bearer {token}"
         yield c
 ```
 
 ---
 
-## 16. Deployment (Contabo VPS)
+## 16. Deployment (Dokploy)
 
 ```
-Internet → Nginx (SSL termination, reverse proxy) → Gunicorn (Uvicorn workers) → FastAPI app
-                                                    ↘ PostgreSQL (same VPS or managed)
-                                                    ↘ Redis (same VPS)
+Internet → Dokploy (Traefik: TLS, routing, redeploys) → app container (Uvicorn)
+                                                        ↘ PostgreSQL (Dokploy database service)
+                                                        ↘ Redis (Dokploy database service)
 ```
 
-### 16.1 `docker-compose.yml` (sketch)
+### 16.1 App service
 
-```yaml
-version: "3.9"
-services:
-  api:
-    build: ./docker
-    env_file: .env
-    depends_on: [db, redis]
-    restart: always
-    ports: ["8000:8000"]
+- Service type: **Docker**, built from the repo-root `Dockerfile` — single container running `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- No Nginx config of our own: Dokploy's built-in Traefik handles reverse proxy, Let's Encrypt TLS, and automatic redeploys on git push
+- Health check path `/health` (must check DB **and** Redis — see §16.4); Dokploy restarts unhealthy containers
+- Set Dokploy's max request body size to 25M for media uploads
+- Enable the HSTS header as app-level middleware, since TLS is terminated upstream at Traefik
+- All secrets (`DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `SMTP_*`, R2 keys) are set as environment variables in the Dokploy panel — never baked into the image
 
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: excel_insider
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    restart: always
+### 16.2 Databases
 
-  redis:
-    image: redis:7-alpine
-    restart: always
+- PostgreSQL 16 and Redis 7 run as **separate Dokploy database services**, not inside the app container
+- `DATABASE_URL` / `REDIS_URL` point at the internal Dokploy service hostnames
+- Dokploy's scheduled database backups target S3-compatible storage — point them at a dedicated **Cloudflare R2 bucket**, separate from the media bucket
 
-volumes:
-  pgdata:
-```
+### 16.3 Backups
 
-### 16.2 Gunicorn command
+- Dokploy automated Postgres backups → R2, retain 14 daily + 6 monthly
+- Media already live in R2; enable R2 object versioning as the media-side safety net
 
-```
-gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 --bind 0.0.0.0:8000
-```
-Worker count rule of thumb: `(2 × CPU cores) + 1`.
+### 16.4 Monitoring
 
-### 16.3 Nginx essentials
-- Reverse proxy `/api/` → `127.0.0.1:8000`
-- `client_max_body_size 25M;` (for media uploads)
-- Let's Encrypt (Certbot) for SSL, auto-renew via cron
-- Gzip/Brotli compression on JSON responses
-
-### 16.4 Backups
-- Nightly `pg_dump` → compressed → pushed to Cloudflare R2 (separate bucket/prefix from media)
-- Retain 14 daily + 6 monthly backups
-
-### 16.5 Monitoring
-- `/health` endpoint (checks DB + Redis connectivity) for uptime monitors
-- Structured JSON logging (via `structlog` or similar) so Hostinger's past "no error log" problem can't recur — logs written to a rotated file **and** stdout (captured by Docker)
+- `/health` checks DB **and** Redis connectivity, wired to an uptime monitor (UptimeRobot or similar)
+- Structured JSON logging (via `structlog` or similar) so the "no error log" problem can't recur — logs to stdout, captured and viewable in the Dokploy dashboard
 
 ---
 
@@ -891,7 +901,7 @@ Matches the client-facing timeline's Week 1–2, but broken into daily-buildable
 
 1. **Scaffold** — project structure, `config.py`, `database.py`, Docker Compose (Postgres + Redis running locally)
 2. **Models + Alembic** — all tables from §4, first migration, verify schema in a DB client
-3. **Auth module** — register (seed a Super Admin manually), login, refresh, logout, `get_current_user` dependency, `require_role()` dependency
+3. **Auth module** — register (seed a Super Admin manually), login, refresh, logout, forgot/reset/change password (email via SMTP), email verification, `get_current_user` dependency, `require_role()` dependency
 4. **Categories module** — full CRUD + reorder endpoint + tree-building query + Redis caching
 5. **Posts module (core)** — CRUD, status transitions, slug generation/uniqueness, RBAC per §5.3
 6. **Tags + Comments modules**
@@ -902,7 +912,7 @@ Matches the client-facing timeline's Week 1–2, but broken into daily-buildable
 11. **Newsletter module**
 12. **WordPress ETL scripts** — extract → transform → load → verification checklist
 13. **Hardening pass** — rate limiting, audit logging, security checklist review, test suite to green
-14. **Deploy** — Docker Compose up on Contabo VPS, Nginx + SSL, backups configured, `/health` wired to uptime monitor
+14. **Deploy** — push to Git, Dokploy builds the root `Dockerfile`, Postgres + Redis as Dokploy database services, backups configured, `/health` wired to uptime monitor
 
 ---
 

@@ -4,13 +4,15 @@ sqlalchemy[asyncio]
 asyncpg
 alembic
 pydantic-settings
-python-jose[cryptography]
-passlib[argon2]
+pyjwt
+pwdlib[argon2]
 python-multipart
 redis
 boto3
 pillow
 apscheduler
+aiosmtplib
+nh3
 pytest
 pytest-asyncio
 httpx
