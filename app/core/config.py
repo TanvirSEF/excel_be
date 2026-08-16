@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     first_admin_email: str = ""
     first_admin_password: str = ""
 
+    resend_api_key: str = ""
+    email_from: str = "Excel Insider <no-reply@excelinsider.com>"
+    frontend_url: str = "http://localhost:3000"
+
     allowed_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

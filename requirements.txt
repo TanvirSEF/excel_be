@@ -11,7 +11,6 @@ redis
 boto3
 pillow
 apscheduler
-aiosmtplib
 nh3
 pytest
 pytest-asyncio

@@ -55,7 +55,7 @@ This backend must:
 | Cache/Session | **Redis 7** | Query caching, rate limiting, session/refresh-token blacklist |
 | Auth | **OAuth2 Password Flow + JWT** via `PyJWT` | Access + refresh token rotation; PyJWT is the actively maintained choice |
 | Password Hashing | **Argon2** (via `pwdlib[argon2]`) | Stronger than bcrypt, recommended by OWASP; `pwdlib` replaces the unmaintained `passlib` (broken on Python 3.13+) |
-| Email | **aiosmtplib** (SMTP) | Transactional mail (password reset, verification, unsubscribe links) via any provider — Postmark, SES, Resend SMTP |
+| Email | **Resend** HTTP API (via `httpx`) | Transactional mail (password reset, verification, unsubscribe links) — no SMTP dependency, one module to swap providers |
 | Validation | **Pydantic v2** | Ships with FastAPI, fast (Rust core), clean schema definitions |
 | Search | **PostgreSQL Full-Text Search** (`tsvector` + GIN index) to start; upgrade path to **Meilisearch** later | One less service to run on a single VPS; Postgres FTS is genuinely fast enough for ~2,000 articles |
 | Object Storage | **Cloudflare R2** (S3-compatible) via `boto3` | No egress fees, cheaper than S3 |
@@ -218,6 +218,21 @@ excel-insider-backend/
 | created_at | TIMESTAMPTZ | DEFAULT now() |
 
 **Indexes:** index on `user_id`, index on `expires_at` (for cleanup job)
+
+### 4.2b `password_reset_tokens`
+
+Single-use reset tokens — opaque random value, only the SHA-256 hash is stored (same pattern as `refresh_tokens`).
+
+| Column | Type | Constraints |
+|---|---|---|
+| id | UUID | PK |
+| user_id | UUID | FK → users.id, CASCADE DELETE |
+| token_hash | VARCHAR(255) | UNIQUE, NOT NULL |
+| expires_at | TIMESTAMPTZ | NOT NULL — 30 minute lifetime |
+| used | BOOLEAN | DEFAULT false — flipped on use; a new request invalidates previous unused tokens |
+| created_at | TIMESTAMPTZ | DEFAULT now() |
+
+Email-verification tokens are stateless short-lived JWTs (`type=verify_email`, 24h) — low-risk flag, no table needed.
 
 ### 4.3 `categories`
 
@@ -776,11 +791,8 @@ RATE_LIMIT_LOGIN=5/15minutes
 RATE_LIMIT_COMMENT=3/10minutes
 RATE_LIMIT_NEWSLETTER=5/1hour
 
-# Transactional email
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
+# Transactional email (Resend)
+RESEND_API_KEY=
 EMAIL_FROM="Excel Insider <no-reply@excelinsider.com>"
 
 # Links
