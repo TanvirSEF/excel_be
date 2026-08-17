@@ -279,6 +279,7 @@ Email-verification tokens are stateless short-lived JWTs (`type=verify_email`, 2
 | schema_type | VARCHAR(50) | DEFAULT `TechArticle` — for JSON-LD (`TechArticle`, `HowTo`, `FAQPage`) |
 | published_at | TIMESTAMPTZ | NULLABLE |
 | scheduled_at | TIMESTAMPTZ | NULLABLE |
+| rejection_reason | VARCHAR(500) | NULLABLE — set on reject, cleared on resubmit |
 | created_at | TIMESTAMPTZ | DEFAULT now() |
 | updated_at | TIMESTAMPTZ | DEFAULT now() |
 | deleted_at | TIMESTAMPTZ | NULLABLE — soft delete marker; all queries filter `deleted_at IS NULL` |

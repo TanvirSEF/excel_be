@@ -2,7 +2,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
+from app.utils.slugify import SLUG_PATTERN
 
 
 class CategoryCreate(BaseModel):
