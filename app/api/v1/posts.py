@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -8,6 +8,7 @@ from app.deps.auth_deps import get_current_user, require_role
 from app.deps.pagination import PaginationParams
 from app.models import PostStatus, User, UserRole
 from app.schemas.common import Page
+from app.schemas.comment import CommentCreate, CommentOut
 from app.schemas.post import (
     PostAdminItem,
     PostCreate,
@@ -18,7 +19,7 @@ from app.schemas.post import (
     ScheduleRequest,
     SeoUpdate,
 )
-from app.services import post_service
+from app.services import comment_service, post_service
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -52,6 +53,26 @@ async def admin_list(
 @router.get("/{slug}", response_model=PostDetail)
 async def get_by_slug(slug: str, db: AsyncSession = Depends(get_db)) -> PostDetail:
     return await post_service.get_by_slug(db, slug)
+
+
+@router.get("/{post_id}/comments", response_model=list[CommentOut])
+async def list_comments(
+    post_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[CommentOut]:
+    return await comment_service.list_for_post(db, post_id)
+
+
+@router.post("/{post_id}/comments", status_code=201)
+async def create_comment(
+    post_id: UUID,
+    data: CommentCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    ip = request.client.host if request.client else None
+    comment = await comment_service.create(db, post_id, data, ip)
+    return {"id": str(comment.id), "status": comment.status.value}
 
 
 @router.post("", response_model=PostDetail, status_code=201)

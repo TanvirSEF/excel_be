@@ -28,6 +28,7 @@ class PostCreate(BaseModel):
     content_json: dict
     featured_image_url: str | None = None
     category_id: uuid.UUID | None = None
+    tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
     canonical_url: str | None = None
@@ -42,6 +43,7 @@ class PostUpdate(BaseModel):
     content_json: dict | None = None
     featured_image_url: str | None = None
     category_id: uuid.UUID | None = None
+    tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
     canonical_url: str | None = None
@@ -65,6 +67,7 @@ class PostDetail(BaseModel):
     category_id: uuid.UUID | None = None
     category_name: str | None = None
     category_slug: str | None = None
+    tags: list[str] = []
     view_count: int
     is_trending: bool
     reading_time_minutes: int | None

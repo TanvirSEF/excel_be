@@ -15,6 +15,7 @@ from app.core.exceptions import (
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
 from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
+from app.services import tag_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.slugify import slugify
 
@@ -145,6 +146,8 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
     db.add(post)
     await db.commit()
     await db.refresh(post)
+    if data.tags is not None:
+        await tag_service.sync_post_tags(db, post, data.tags)
     return await _to_detail(db, post)
 
 
@@ -162,6 +165,10 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
 
     if "category_id" in fields and data.category_id is not None:
         await _category_or_404(db, data.category_id)
+
+    if "tags" in fields:
+        await tag_service.sync_post_tags(db, post, data.tags or [])
+        fields.discard("tags")
 
     for field in fields:
         setattr(post, field, getattr(data, field))
@@ -311,6 +318,7 @@ async def _to_detail(db: AsyncSession, post: Post) -> PostDetail:
     detail.author_name = author_name
     detail.category_name = category.name if category else None
     detail.category_slug = category.slug if category else None
+    detail.tags = await tag_service.post_tag_names(db, post.id)
     return detail
 
 
