@@ -51,8 +51,14 @@ async def admin_list(
 
 
 @router.get("/{slug}", response_model=PostDetail)
-async def get_by_slug(slug: str, db: AsyncSession = Depends(get_db)) -> PostDetail:
-    return await post_service.get_by_slug(db, slug)
+async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(get_db)) -> PostDetail:
+    return await post_service.get_by_slug(
+        db,
+        slug,
+        user_agent=request.headers.get("user-agent"),
+        ip=request.client.host if request.client else None,
+        referrer=request.headers.get("referer"),
+    )
 
 
 @router.get("/{post_id}/comments", response_model=list[CommentOut])

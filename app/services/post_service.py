@@ -15,7 +15,7 @@ from app.core.exceptions import (
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
 from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
-from app.services import tag_service
+from app.services import tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.slugify import slugify
 
@@ -56,7 +56,13 @@ async def list_public(
     return await _page(db, pagination, conditions)
 
 
-async def get_by_slug(db: AsyncSession, slug: str) -> PostDetail:
+async def get_by_slug(
+    db: AsyncSession,
+    slug: str,
+    user_agent: str | None = None,
+    ip: str | None = None,
+    referrer: str | None = None,
+) -> PostDetail:
     post = await db.scalar(
         select(Post).where(
             Post.slug == slug,
@@ -66,6 +72,8 @@ async def get_by_slug(db: AsyncSession, slug: str) -> PostDetail:
     )
     if post is None:
         raise NotFoundException("Post not found", code="POST_NOT_FOUND")
+
+    await view_service.register_view(str(post.id), user_agent, ip, referrer)
     return await _to_detail(db, post)
 
 
