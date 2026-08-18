@@ -4,6 +4,7 @@ from sqlalchemy import func, update
 
 from app.core.database import AsyncSessionLocal
 from app.models import Post, PostStatus
+from app.services.seo_service import invalidate_sitemap
 
 logger = logging.getLogger(__name__)
 
@@ -22,3 +23,4 @@ async def publish_scheduled_posts() -> None:
         await session.commit()
         if result.rowcount:
             logger.info("Published %d scheduled posts", result.rowcount)
+            await invalidate_sitemap()

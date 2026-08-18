@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from app.api.v1.router import api_router
+from app.api.v1.seo import router as seo_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.exceptions import AppException
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+app.include_router(seo_router)
 
 
 @app.exception_handler(AppException)

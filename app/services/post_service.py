@@ -15,7 +15,7 @@ from app.core.exceptions import (
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
 from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
-from app.services import tag_service, view_service
+from app.services import seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.slugify import slugify
 
@@ -235,6 +235,7 @@ async def publish(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post.published_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(post)
+    await seo_service.invalidate_sitemap()
     return await _to_detail(db, post)
 
 
