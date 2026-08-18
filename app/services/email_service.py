@@ -40,3 +40,12 @@ def verify_email_template(link: str) -> str:
     <p><a href="{link}">Verify email</a></p>
     <p>This link expires in 24 hours.</p>
     """
+
+
+def welcome_email_template(unsubscribe_link: str) -> str:
+    return f"""
+    <p>Hi,</p>
+    <p>Thanks for subscribing to the Excel Insider newsletter.</p>
+    <p>Excel tips, templates and tutorials straight to your inbox.</p>
+    <p><a href="{unsubscribe_link}">Unsubscribe</a></p>
+    """

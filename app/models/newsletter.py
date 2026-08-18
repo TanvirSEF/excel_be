@@ -27,3 +27,5 @@ class NewsletterSubscriber(Base):
     )
     source: Mapped[str | None] = mapped_column(String(50))
     subscribed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

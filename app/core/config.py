@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     first_admin_password: str = ""
 
     resend_api_key: str = ""
+    resend_segment_id: str = ""
     email_from: str = "Excel Insider <no-reply@excelinsider.com>"
     frontend_url: str = "http://localhost:3000"
 

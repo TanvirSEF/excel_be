@@ -13,6 +13,7 @@ password_hash = PasswordHash.recommended()
 ACCESS = "access"
 REFRESH = "refresh"
 VERIFY_EMAIL = "verify_email"
+NEWSLETTER_UNSUB = "newsletter_unsub"
 
 
 def hash_password(password: str) -> str:
@@ -29,6 +30,10 @@ def generate_reset_token() -> str:
 
 def create_verify_email_token(user_id: str) -> str:
     return _create_token(user_id, None, VERIFY_EMAIL, timedelta(hours=24))
+
+
+def create_unsubscribe_token(email: str) -> str:
+    return _create_token(email, None, NEWSLETTER_UNSUB, timedelta(days=30))
 
 
 def verify_password(password: str, hashed: str) -> bool:

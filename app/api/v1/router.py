@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import analytics, auth, categories, comments, media, posts, search, tags, users
+from app.api.v1 import analytics, auth, categories, comments, media, newsletter, posts, search, tags, users
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
@@ -12,3 +12,4 @@ api_router.include_router(comments.router)
 api_router.include_router(media.router)
 api_router.include_router(search.router)
 api_router.include_router(analytics.router)
+api_router.include_router(newsletter.router)

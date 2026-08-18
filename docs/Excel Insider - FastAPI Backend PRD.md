@@ -387,8 +387,10 @@ Tracks admin-level actions (required for Super Admin oversight — publish/delet
 | status | ENUM | `subscribed`, `unsubscribed`, `bounced` |
 | source | VARCHAR(50) | e.g. `article_footer`, `popup` |
 | subscribed_at | TIMESTAMPTZ | DEFAULT now() |
+| unsubscribed_at | TIMESTAMPTZ | NULL |
+| synced_at | TIMESTAMPTZ | NULL — last successful push to Resend; NULL = pending sync |
 
-> Sync this table to Mailchimp/ConvertKit via their API on a scheduled job, or on webhook — don't make the newsletter provider a hard dependency of the signup endpoint's response time.
+> This table is the source of truth. A scheduled job pushes rows with `synced_at IS NULL` to **Resend Contacts** (upsert into the `Newsletter` segment; unsubscribe = `PATCH /contacts/{email}` with `unsubscribed: true`) — the ESP is never a hard dependency of the signup endpoint's response time.
 
 ### 4.12 `redirects`
 
@@ -615,8 +617,8 @@ Route order matters: declare `/categories/reorder` before `/categories/{id}`, or
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/newsletter/subscribe` | Public (rate-limited) | Add subscriber, sync to ESP async |
-| POST | `/newsletter/unsubscribe` | Public (token-based, from email link) | |
+| POST | `/newsletter/subscribe` | Public (rate-limited 5/hour per IP) | Add subscriber (idempotent, resubscribes), sends welcome email, async sync to Resend |
+| POST | `/newsletter/unsubscribe` | Public (token-based, from email link) | JWT `type=newsletter_unsub`, 30-day expiry, idempotent |
 
 ### 6.12 SEO / System
 
@@ -703,7 +705,7 @@ Using **APScheduler** in-process (simplest reliable option for a single-VPS depl
 | `calculate_trending` | Every 30 min | Recomputes "Last 7 Days" velocity ranking → updates `is_trending` flags → refreshes `posts:trending` cache |
 | `regenerate_sitemap` | On publish event + every 6h as fallback | Rebuilds `sitemap.xml`, invalidates CDN cache |
 | `cleanup_expired_tokens` | Daily | Deletes expired/revoked rows from `refresh_tokens` |
-| `sync_newsletter_subscribers` | Every 15 min | Pushes new `newsletter_subscribers` rows to Mailchimp/ConvertKit API |
+| `sync_newsletter_subscribers` | Every 15 min | Pushes pending `newsletter_subscribers` rows to Resend Contacts (upsert into `Newsletter` segment, flag unsubscribes); skips silently in dev when `RESEND_SEGMENT_ID` unset |
 | `prune_old_post_views` | Weekly | Deletes raw `post_views` rows older than 90 days (aggregate stats already rolled up) |
 
 ```python
@@ -783,9 +785,8 @@ R2_PUBLIC_URL=https://media.excelinsider.com
 # CORS
 ALLOWED_ORIGINS=https://excelinsider.com,https://www.excelinsider.com
 
-# Newsletter
-MAILCHIMP_API_KEY=
-MAILCHIMP_LIST_ID=
+# Newsletter (Resend — segment that broadcast campaigns target)
+RESEND_SEGMENT_ID=
 
 # Rate limiting
 RATE_LIMIT_LOGIN=5/15minutes

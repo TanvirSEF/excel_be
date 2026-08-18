@@ -28,3 +28,8 @@ class ValidationException(AppException):
 class ConflictException(AppException):
     def __init__(self, message: str = "Conflict", code: str = "CONFLICT"):
         super().__init__(code, message, 409)
+
+
+class TooManyRequestsException(AppException):
+    def __init__(self, message: str = "Too many requests", code: str = "RATE_LIMITED"):
+        super().__init__(code, message, 429)
