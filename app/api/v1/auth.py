@@ -27,7 +27,7 @@ async def register(
     user: User = Depends(require_role(UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    return await auth_service.register(db, data)
+    return await auth_service.register(db, user, data)
 
 
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(login_rate_limit())])

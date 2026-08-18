@@ -12,6 +12,7 @@ from app.core.exceptions import (
 from app.deps.pagination import PaginationParams
 from app.models import RefreshToken, User, UserRole
 from app.schemas.user import UserUpdate
+from app.services import audit_service
 
 ADMIN_ONLY_FIELDS = {"role", "is_active", "is_verified"}
 
@@ -49,9 +50,18 @@ async def update_user(
     if current_user.role != UserRole.super_admin and fields & ADMIN_ONLY_FIELDS:
         raise PermissionDeniedException("Only a super admin can change these fields")
 
+    changes = {
+        field: {
+            "before": audit_service.jsonable(getattr(user, field)),
+            "after": audit_service.jsonable(getattr(data, field)),
+        }
+        for field in fields
+    }
     for field in fields:
         setattr(user, field, getattr(data, field))
 
+    action = "user.role_change" if "role" in fields else "user.update"
+    audit_service.record(db, current_user.id, action, "user", user.id, {"changes": changes})
     await db.commit()
     await db.refresh(user)
     return user
@@ -71,4 +81,5 @@ async def deactivate_user(db: AsyncSession, current_user: User, user_id: UUID) -
     await db.execute(
         update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
     )
+    audit_service.record(db, current_user.id, "user.deactivate", "user", user.id)
     await db.commit()

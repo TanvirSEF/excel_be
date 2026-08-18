@@ -626,6 +626,7 @@ Route order matters: declare `/categories/reorder` before `/categories/{id}`, or
 |---|---|---|---|
 | GET | `/sitemap.xml` | Public | Auto-generated, cached, invalidated on publish |
 | GET | `/redirects/{old_path:path}` | Public/internal | Lookup for Next.js middleware 301 handling — the `:path` converter lets WordPress paths containing slashes match |
+| GET | `/api/v1/audit-logs` | Super admin | Paginated audit trail, filters: `user_id`, `entity_type`, `action`, newest first |
 
 ---
 
@@ -848,7 +849,7 @@ Also register a handler for FastAPI's `RequestValidationError` (422) that maps P
 - [ ] **Secrets** — never commit `.env`; inject via Dokploy's environment variables
 - [ ] **HTTPS only** — terminated by Dokploy's Traefik; add an HSTS header in app middleware
 - [ ] **Refresh token rotation** — every refresh issues a new token and revokes the old one (limits replay window)
-- [ ] **Audit logging** — every publish/delete/role-change action recorded in `audit_logs`
+- [x] **Audit logging** — `user.create`, `user.update`/`user.role_change` (with before/after), `user.deactivate`, `post.publish`/`post.reject`/`post.schedule`/`post.delete` recorded in `audit_logs` in the same transaction as the action; queryable via `GET /api/v1/audit-logs` (super admin)
 - [ ] **Dependency scanning** — run `pip-audit` in CI before each deploy
 
 ---

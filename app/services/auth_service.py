@@ -28,6 +28,7 @@ from app.core.security import (
 )
 from app.models import PasswordResetToken, RefreshToken, User
 from app.schemas.auth import RegisterRequest
+from app.services import audit_service
 from app.services.email_service import (
     reset_password_email,
     send_email,
@@ -40,7 +41,7 @@ REFRESH_LIFETIME = timedelta(days=settings.refresh_token_expire_days)
 RESET_TOKEN_LIFETIME = timedelta(minutes=30)
 
 
-async def register(db: AsyncSession, data: RegisterRequest) -> User:
+async def register(db: AsyncSession, actor: User, data: RegisterRequest) -> User:
     existing = await db.scalar(select(User).where(User.email == data.email))
     if existing is not None:
         raise ConflictException("Email already registered", code="EMAIL_TAKEN")
@@ -52,6 +53,8 @@ async def register(db: AsyncSession, data: RegisterRequest) -> User:
         role=data.role,
     )
     db.add(user)
+    await db.flush()
+    audit_service.record(db, actor.id, "user.create", "user", user.id, {"role": data.role.value})
     await db.commit()
     await db.refresh(user)
     return user

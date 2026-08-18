@@ -15,7 +15,7 @@ from app.core.exceptions import (
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
 from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
-from app.services import seo_service, tag_service, view_service
+from app.services import audit_service, seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.slugify import slugify
 
@@ -197,6 +197,7 @@ async def soft_delete(db: AsyncSession, user: User, post_id: UUID) -> None:
         raise PermissionDeniedException()
 
     post.deleted_at = datetime.now(timezone.utc)
+    audit_service.record(db, user.id, "post.delete", "post", post.id, {"slug": post.slug})
     await db.commit()
 
 
@@ -233,6 +234,7 @@ async def publish(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
 
     post.status = PostStatus.published
     post.published_at = datetime.now(timezone.utc)
+    audit_service.record(db, user.id, "post.publish", "post", post.id, {"slug": post.slug})
     await db.commit()
     await db.refresh(post)
     await seo_service.invalidate_sitemap()
@@ -253,6 +255,7 @@ async def reject(db: AsyncSession, user: User, post_id: UUID, reason: str) -> Po
 
     post.status = PostStatus.rejected
     post.rejection_reason = reason
+    audit_service.record(db, user.id, "post.reject", "post", post.id, {"slug": post.slug, "reason": reason})
     await db.commit()
     await db.refresh(post)
     return await _to_detail(db, post)
@@ -281,6 +284,9 @@ async def schedule(
 
     post.status = PostStatus.scheduled
     post.scheduled_at = scheduled_at
+    audit_service.record(
+        db, user.id, "post.schedule", "post", post.id, {"slug": post.slug, "scheduled_at": scheduled_at.isoformat()}
+    )
     await db.commit()
     await db.refresh(post)
     return await _to_detail(db, post)
