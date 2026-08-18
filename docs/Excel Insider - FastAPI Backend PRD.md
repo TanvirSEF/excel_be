@@ -843,14 +843,14 @@ Also register a handler for FastAPI's `RequestValidationError` (422) that maps P
 - [x] **Rate limiting** on `/auth/login` (5/15m), `/comments` (3/10m), `/newsletter/subscribe` (5/1h) — Redis **sliding window** (`app/deps/rate_limit.py`, per-IP via `X-Forwarded-For` first hop for Dokploy's Traefik, `Retry-After` header on 429, silently allows if Redis is down)
 - [ ] **CORS** locked to the known Next.js frontend origin(s) only — no wildcard `*` in production
 - [ ] **SQL injection** — non-issue by default since SQLAlchemy parameterizes all queries; never use raw string-interpolated SQL
-- [ ] **XSS** — sanitize any HTML rendered from `content_json` → `content_html` on the server (use `nh3`, the maintained Rust successor to the archived `bleach`) before storing/serving
+- [x] **XSS** — `app/utils/sanitize.py` (nh3, tag/attribute/scheme allowlist incl. iframe for embeds) applied to html-passthrough blocks in `_render_html` and to imported WordPress `content_html` at storage time
 - [ ] **Input validation** — every request body validated via Pydantic schemas; reject unknown fields (`model_config = ConfigDict(extra="forbid")`)
 - [ ] **File upload validation** — check MIME type + magic bytes (not just extension) before processing uploads; cap file size (e.g. 10MB images, 25MB downloadable assets)
 - [ ] **Secrets** — never commit `.env`; inject via Dokploy's environment variables
-- [ ] **HTTPS only** — terminated by Dokploy's Traefik; add an HSTS header in app middleware
+- [x] **HTTPS only** — terminated by Dokploy's Traefik; HSTS header (`max-age=31536000; includeSubDomains`) added in app middleware
 - [ ] **Refresh token rotation** — every refresh issues a new token and revokes the old one (limits replay window)
 - [x] **Audit logging** — `user.create`, `user.update`/`user.role_change` (with before/after), `user.deactivate`, `post.publish`/`post.reject`/`post.schedule`/`post.delete` recorded in `audit_logs` in the same transaction as the action; queryable via `GET /api/v1/audit-logs` (super admin)
-- [ ] **Dependency scanning** — run `pip-audit` in CI before each deploy
+- [x] **Dependency scanning** — `pip-audit -r requirements.txt` clean (no known vulnerabilities, 2026-08-18); re-run before each deploy
 
 ---
 

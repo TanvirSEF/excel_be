@@ -17,6 +17,7 @@ from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
 from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
 from app.services import audit_service, seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
+from app.utils.sanitize import sanitize_html
 from app.utils.slugify import slugify
 
 EDITORS = (UserRole.super_admin, UserRole.senior_editor)
@@ -375,7 +376,7 @@ def _render_html(content_json: dict) -> str:
         if not isinstance(block, dict):
             continue
         if block.get("html"):
-            rendered.append(block["html"])
+            rendered.append(sanitize_html(block["html"]))
             continue
         text = html.escape(block.get("text", ""))
         block_type = block.get("type", "paragraph")

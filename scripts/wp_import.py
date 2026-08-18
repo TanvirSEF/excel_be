@@ -30,6 +30,7 @@ from app.models import (
 from app.services import tag_service
 from app.services.media_service import process_image, upload_to_r2
 from app.utils.reading_time import reading_time_minutes
+from app.utils.sanitize import sanitize_html
 from app.utils.slugify import slugify
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -465,9 +466,7 @@ class MediaPipeline:
             return url
 
 
-SRCSET_RE = re.compile(r'\s(?:srcset|sizes)="[^"]*"')
 IMG_SRC_RE = re.compile(r'<img[^>]+src="([^"]+)"')
-SCRIPT_BLOCK_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
 
 
 async def import_posts(db, wxr: WxrFile, media: MediaPipeline, limit: int | None) -> dict:
@@ -481,8 +480,7 @@ async def import_posts(db, wxr: WxrFile, media: MediaPipeline, limit: int | None
                 new_url = await media.remap(img_url)
                 if new_url != img_url:
                     content_html = content_html.replace(img_url, new_url)
-            content_html = SRCSET_RE.sub("", content_html)
-        content_html = SCRIPT_BLOCK_RE.sub("", content_html)
+        content_html = sanitize_html(content_html)
 
         featured_url = None
         if wp_post.thumbnail_id:
