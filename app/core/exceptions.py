@@ -1,8 +1,9 @@
 class AppException(Exception):
-    def __init__(self, code: str, message: str, status_code: int = 400):
+    def __init__(self, code: str, message: str, status_code: int = 400, headers: dict | None = None):
         self.code = code
         self.message = message
         self.status_code = status_code
+        self.headers = headers
 
 
 class UnauthorizedException(AppException):
@@ -31,5 +32,6 @@ class ConflictException(AppException):
 
 
 class TooManyRequestsException(AppException):
-    def __init__(self, message: str = "Too many requests", code: str = "RATE_LIMITED"):
-        super().__init__(code, message, 429)
+    def __init__(self, message: str = "Too many requests", code: str = "RATE_LIMITED", retry_after: int | None = None):
+        headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        super().__init__(code, message, 429, headers)

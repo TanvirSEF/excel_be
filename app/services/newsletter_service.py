@@ -6,8 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import TooManyRequestsException, UnauthorizedException
-from app.core.redis_client import get_redis
+from app.core.exceptions import UnauthorizedException
 from app.core.security import (
     NEWSLETTER_UNSUB,
     create_unsubscribe_token,
@@ -18,13 +17,8 @@ from app.services.email_service import send_email, welcome_email_template
 
 logger = logging.getLogger(__name__)
 
-SUBSCRIBE_LIMIT = 5
-SUBSCRIBE_WINDOW = 3600
 
-
-async def subscribe(db: AsyncSession, email: str, source: str | None, ip: str | None) -> None:
-    await _check_rate_limit(ip)
-
+async def subscribe(db: AsyncSession, email: str, source: str | None) -> None:
     normalized = email.lower()
     subscriber = await db.scalar(
         select(NewsletterSubscriber).where(NewsletterSubscriber.email == normalized)
@@ -70,20 +64,3 @@ async def unsubscribe(db: AsyncSession, token: str) -> None:
     subscriber.unsubscribed_at = datetime.now(timezone.utc)
     subscriber.synced_at = None
     await db.commit()
-
-
-async def _check_rate_limit(ip: str | None) -> None:
-    if not ip:
-        return
-
-    key = f"ratelimit:newsletter:{ip}"
-    try:
-        count = await get_redis().incr(key)
-        if count == 1:
-            await get_redis().expire(key, SUBSCRIBE_WINDOW)
-        if count > SUBSCRIBE_LIMIT:
-            raise TooManyRequestsException("Too many subscribe attempts, try again later")
-    except TooManyRequestsException:
-        raise
-    except Exception:
-        logger.warning("Rate limit check skipped, Redis unavailable")

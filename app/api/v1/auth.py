@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
+from app.deps.rate_limit import login_rate_limit
 from app.models import User, UserRole
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -29,7 +30,7 @@ async def register(
     return await auth_service.register(db, data)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(login_rate_limit())])
 async def login(
     request: Request,
     form: OAuth2PasswordRequestForm = Depends(),

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:3000"
 
+    rate_limit_login: str = "5/15minutes"
+    rate_limit_comment: str = "3/10minutes"
+    rate_limit_newsletter: str = "5/1hour"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

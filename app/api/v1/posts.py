@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
 from app.deps.pagination import PaginationParams
+from app.deps.rate_limit import comment_rate_limit
 from app.models import PostStatus, User, UserRole
 from app.schemas.common import Page
 from app.schemas.comment import CommentCreate, CommentOut
@@ -69,7 +70,7 @@ async def list_comments(
     return await comment_service.list_for_post(db, post_id)
 
 
-@router.post("/{post_id}/comments", status_code=201)
+@router.post("/{post_id}/comments", status_code=201, dependencies=[Depends(comment_rate_limit())])
 async def create_comment(
     post_id: UUID,
     data: CommentCreate,

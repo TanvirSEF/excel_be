@@ -839,7 +839,7 @@ Also register a handler for FastAPI's `RequestValidationError` (422) that maps P
 
 ## 14. Security Checklist
 
-- [ ] **Rate limiting** on `/auth/login`, `/comments`, `/newsletter/subscribe` via Redis (sliding window or token bucket)
+- [x] **Rate limiting** on `/auth/login` (5/15m), `/comments` (3/10m), `/newsletter/subscribe` (5/1h) — Redis **sliding window** (`app/deps/rate_limit.py`, per-IP via `X-Forwarded-For` first hop for Dokploy's Traefik, `Retry-After` header on 429, silently allows if Redis is down)
 - [ ] **CORS** locked to the known Next.js frontend origin(s) only — no wildcard `*` in production
 - [ ] **SQL injection** — non-issue by default since SQLAlchemy parameterizes all queries; never use raw string-interpolated SQL
 - [ ] **XSS** — sanitize any HTML rendered from `content_json` → `content_html` on the server (use `nh3`, the maintained Rust successor to the archived `bleach`) before storing/serving
