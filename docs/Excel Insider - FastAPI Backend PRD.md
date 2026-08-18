@@ -928,7 +928,7 @@ Matches the client-facing timeline's Week 1–2, but broken into daily-buildable
 9. **Analytics** — view counting via Redis buffer + flush job, trending job
 10. **SEO/system endpoints** — sitemap.xml generation, redirects lookup
 11. **Newsletter module**
-12. **WordPress ETL scripts** — extract → transform → load → verification checklist
+12. **WordPress ETL scripts** — `scripts/wp_import.py` imports a WordPress WXR export (`Tools → Export → All content`): posts (status-mapped, GMT dates preserved), categories (parent-first), tags, attachments → R2 WebP (`wp-import/{url-hash}-{name}.webp` deterministic keys), inline `<img>` URL remap with `srcset`/`sizes`/`<script>`/`<style>` stripped, Yoast/RankMath SEO meta → `meta_title`/`meta_description`, approved comments with parent links, dated-permalink redirects. Idempotent: posts upsert by slug, media dedup by file URL, comments only on first creation. `--dry-run` reports before writing; `--author-email` maps all posts to a backend user; `--no-images` keeps original URLs
 13. **Hardening pass** — rate limiting, audit logging, security checklist review, test suite to green
 14. **Deploy** — push to Git, Dokploy builds the root `Dockerfile`, Postgres + Redis as Dokploy database services, backups configured, `/health` wired to uptime monitor
 
