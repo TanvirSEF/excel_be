@@ -50,7 +50,10 @@ The seed creates the first Super Admin from `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_P
 
 ## Tests
 
+The suite runs against the PostgreSQL and Redis instances started above:
+
 ```bash
+docker compose up -d
 pytest
 ```
 

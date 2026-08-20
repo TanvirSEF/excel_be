@@ -3,8 +3,7 @@
 Findings are verified against the code as of 2026-08-20. Each phase is implemented,
 tested, and left green before the next one starts.
 
-Status: Phases 0–7 complete. Phase 8 (test expansion, doc pass) partially covered —
-each phase shipped with its own tests; a final gap-fill pass remains open.
+Status: Phases 0–8 complete.
 
 Verified state that differs from the review:
 
@@ -145,8 +144,20 @@ Done when: unknown-field and bad-type requests return the standard envelope with
 - HSTS sent only when `environment == "production"`.
 - Redirects mount verified as correct (see note above); no change.
 
-## Phase 8 — Test expansion and docs
+## Phase 8 — Test expansion and docs — DONE
 
-- Concurrency suite (rotation race, view flush accuracy under parallel views).
-- Analytics accuracy end-to-end, cache invalidation matrix, upload size caps.
-- README/docs updated for everything above that changes observable behavior.
+- Concurrency: 5-way refresh rotation burst (exactly one 200, one surviving
+  token row) and 50 parallel view registrations flushed by two concurrent
+  flush runs (every view stored exactly once, view_count exact).
+- Analytics end-to-end through the API: post totals, 7-day series, unique
+  visitors and overview top-posts match flushed events.
+- Cache invalidation matrix: title update in the home list, slug rename
+  (old detail 404s, new resolves), soft delete (detail 404 + gone from the
+  list), category rename in the tree.
+- Upload caps: the 25MB asset cap rejects with FILE_TOO_LARGE (the media 10MB
+  cap was already covered).
+- The matrix caught a real gap: post update only invalidated the detail key,
+  so the home/trending lists served a stale title for up to 2 minutes.
+  Updates touching list-visible fields (title, slug, excerpt,
+  featured_image_url, content_json) now invalidate both list families too.
+- README's test section notes the Docker services requirement.

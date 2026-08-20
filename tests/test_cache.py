@@ -96,6 +96,84 @@ async def test_home_list_reflects_publish(client, admin_token):
     assert post["slug"] in {item["slug"] for item in second.json()["items"]}
 
 
+async def test_home_list_reflects_title_update(client, admin_token):
+    post = await publish_post(client, admin_token)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    first = await client.get("/api/v1/posts")
+    assert post["slug"] in {item["slug"] for item in first.json()["items"]}
+
+    renamed = await client.patch(
+        f"/api/v1/posts/{post['id']}", headers=headers, json={"title": "Matrix renamed post"}
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    second = await client.get("/api/v1/posts")
+    item = next(i for i in second.json()["items"] if i["slug"] == post["slug"])
+    assert item["title"] == "Matrix renamed post"
+
+
+async def test_slug_rename_retires_old_detail(client, admin_token):
+    post = await publish_post(client, admin_token)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    first = await client.get(f"/api/v1/posts/{post['slug']}")
+    assert first.status_code == 200
+
+    renamed = await client.patch(
+        f"/api/v1/posts/{post['id']}",
+        headers=headers,
+        json={"slug": f"cache-test-{uuid4().hex[:8]}"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    new_slug = renamed.json()["slug"]
+
+    assert (await client.get(f"/api/v1/posts/{post['slug']}")).status_code == 404
+    fresh = await client.get(f"/api/v1/posts/{new_slug}")
+    assert fresh.status_code == 200
+
+
+async def test_soft_delete_invalidates_detail_and_list(client, admin_token):
+    post = await publish_post(client, admin_token)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    listed = await client.get("/api/v1/posts")
+    assert post["slug"] in {item["slug"] for item in listed.json()["items"]}
+    assert (await client.get(f"/api/v1/posts/{post['slug']}")).status_code == 200
+
+    deleted = await client.delete(f"/api/v1/posts/{post['id']}", headers=headers)
+    assert deleted.status_code == 200, deleted.text
+
+    assert (await client.get(f"/api/v1/posts/{post['slug']}")).status_code == 404
+    fresh = await client.get("/api/v1/posts")
+    assert post["slug"] not in {item["slug"] for item in fresh.json()["items"]}
+
+
+async def test_category_tree_reflects_rename(client, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    created = await client.post(
+        "/api/v1/categories",
+        headers=headers,
+        json={"name": f"Cache category {uuid4().hex[:8]}"},
+    )
+    assert created.status_code == 201, created.text
+    old = created.json()
+
+    first = await client.get("/api/v1/categories")
+    assert old["slug"] in {category["slug"] for category in first.json()}
+
+    renamed = await client.patch(
+        f"/api/v1/categories/{old['id']}",
+        headers=headers,
+        json={"name": "Matrix renamed category"},
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    second = await client.get("/api/v1/categories")
+    slugs = {category["slug"] for category in second.json()}
+    assert renamed.json()["slug"] in slugs
+
+
 async def test_trending_keys_invalidated_on_recalc():
     await get_redis().set("posts:trending:1:20", "[]")
     await calculate_trending()

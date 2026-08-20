@@ -219,6 +219,8 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         cache_service.post_detail_key(post.slug),
         cache_service.post_detail_key(old_slug),
     )
+    if fields & {"title", "slug", "excerpt", "featured_image_url", "content_json"}:
+        await _invalidate_list_caches()
     if post.slug != old_slug:
         await seo_service.invalidate_sitemap()
     return await _to_detail(db, post)

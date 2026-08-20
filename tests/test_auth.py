@@ -107,6 +107,30 @@ async def test_concurrent_refresh_rotation_single_use(client, admin_token):
     assert statuses == [200, 401]
 
 
+async def test_rotation_burst_issues_exactly_one_token(client, admin_token):
+    created = await register_user(client, admin_token)
+    session = await login(client, created["email"], "AuthPass123!")
+    refresh = session.json()["refresh_token"]
+
+    responses = await asyncio.gather(
+        *[client.post("/api/v1/auth/refresh", json={"refresh_token": refresh}) for _ in range(5)]
+    )
+    statuses = [response.status_code for response in responses]
+    assert statuses.count(200) == 1
+    assert statuses.count(401) == 4
+
+    async with AsyncSessionLocal() as db:
+        user = await db.scalar(select(User).where(User.email == created["email"]))
+        active = list(
+            await db.scalars(
+                select(RefreshToken).where(
+                    RefreshToken.user_id == user.id, RefreshToken.revoked.is_(False)
+                )
+            )
+        )
+    assert len(active) == 1
+
+
 async def test_logout_revokes_refresh_token(client, admin_token):
     created = await register_user(client, admin_token)
     session = await login(client, created["email"], "AuthPass123!")

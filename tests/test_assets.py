@@ -99,6 +99,20 @@ async def test_attach_rejects_unsupported_extension(client, admin_token):
     assert response.json()["error"]["code"] == "INVALID_FILE_TYPE"
 
 
+async def test_attach_rejects_oversized_file(client, admin_token):
+    post = await create_draft_post(client, admin_token)
+
+    response = await attach(
+        client,
+        admin_token,
+        post["id"],
+        b"PK\x03\x04" + b"0" * asset_service.MAX_ASSET_BYTES,
+        "assets-test.xlsx",
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "FILE_TOO_LARGE"
+
+
 async def test_download_issues_signed_url_and_increments_count(client, admin_token):
     post = await create_draft_post(client, admin_token)
     asset = (await attach(client, admin_token, post["id"], XLSX_BYTES)).json()
