@@ -10,6 +10,8 @@ class Settings(BaseSettings):
 
     database_url: str
     redis_url: str
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
 
     first_admin_email: str = ""
     first_admin_password: str = ""
@@ -30,6 +32,8 @@ class Settings(BaseSettings):
     rate_limit_login: str = "5/15minutes"
     rate_limit_comment: str = "3/10minutes"
     rate_limit_newsletter: str = "5/1hour"
+    rate_limit_forgot_password: str = "5/15minutes"
+    rate_limit_reset_password: str = "10/15minutes"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

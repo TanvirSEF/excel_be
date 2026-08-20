@@ -8,10 +8,15 @@ from app.core.exceptions import ConflictException, NotFoundException, Validation
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus
 from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, ReorderItem
+from app.services import cache_service, seo_service
 from app.utils.slugify import slugify
 
 
 async def get_tree(db: AsyncSession) -> list[CategoryOut]:
+    cached = await cache_service.get_json(cache_service.CATEGORY_TREE_KEY)
+    if cached is not None:
+        return cached
+
     categories = (
         await db.scalars(select(Category).order_by(Category.order_index, Category.name))
     ).all()
@@ -25,7 +30,13 @@ async def get_tree(db: AsyncSession) -> list[CategoryOut]:
         out.children = [to_node(child) for child in children_of.get(category.id, [])]
         return out
 
-    return [to_node(root) for root in children_of.get(None, [])]
+    tree = [to_node(root) for root in children_of.get(None, [])]
+    await cache_service.set_json(
+        cache_service.CATEGORY_TREE_KEY,
+        [node.model_dump(mode="json") for node in tree],
+        cache_service.TREE_TTL,
+    )
+    return tree
 
 
 async def get_by_slug(
@@ -90,6 +101,8 @@ async def create(db: AsyncSession, data: CategoryCreate) -> Category:
     db.add(category)
     await db.commit()
     await db.refresh(category)
+    await cache_service.delete_keys(cache_service.CATEGORY_TREE_KEY)
+    await seo_service.invalidate_sitemap()
     return category
 
 
@@ -117,6 +130,8 @@ async def update(db: AsyncSession, category_id: UUID, data: CategoryUpdate) -> C
 
     await db.commit()
     await db.refresh(category)
+    await cache_service.delete_keys(cache_service.CATEGORY_TREE_KEY)
+    await seo_service.invalidate_sitemap()
     return category
 
 
@@ -149,6 +164,7 @@ async def reorder(db: AsyncSession, items: list[ReorderItem]) -> None:
             parent = categories[parent].parent_id if parent in categories else None
 
     await db.commit()
+    await cache_service.delete_keys(cache_service.CATEGORY_TREE_KEY)
 
 
 async def delete(db: AsyncSession, category_id: UUID) -> None:
@@ -172,6 +188,8 @@ async def delete(db: AsyncSession, category_id: UUID) -> None:
 
     await db.delete(category)
     await db.commit()
+    await cache_service.delete_keys(cache_service.CATEGORY_TREE_KEY)
+    await seo_service.invalidate_sitemap()
 
 
 async def _get_or_404(db: AsyncSession, category_id: UUID) -> Category:

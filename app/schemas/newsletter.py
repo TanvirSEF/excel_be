@@ -1,10 +1,12 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import EmailStr, Field
+
+from app.schemas.common import RequestModel
 
 
-class SubscribeRequest(BaseModel):
+class SubscribeRequest(RequestModel):
     email: EmailStr
     source: str | None = Field(default=None, max_length=50)
 
 
-class UnsubscribeRequest(BaseModel):
+class UnsubscribeRequest(RequestModel):
     token: str

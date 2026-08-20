@@ -24,7 +24,7 @@ async def upload(
     user: User = Depends(require_role(*WRITERS)),
     db: AsyncSession = Depends(get_db),
 ) -> Media:
-    file_bytes = await file.read()
+    file_bytes = await media_service.read_upload(file)
     return await media_service.upload(db, user, file_bytes, file.filename or "", folder)
 
 

@@ -440,10 +440,15 @@ class MediaPipeline:
                 length = int(head.headers.get("content-length") or 0)
                 if length > MAX_DOWNLOAD_BYTES:
                     raise ValueError("too large")
-                response = await client.get(url)
-                data = response.content
-            if len(data) > MAX_DOWNLOAD_BYTES:
-                raise ValueError("too large")
+                chunks: list[bytes] = []
+                total = 0
+                async with client.stream("GET", url) as response:
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > MAX_DOWNLOAD_BYTES:
+                            raise ValueError("too large")
+                        chunks.append(chunk)
+                data = b"".join(chunks)
             processed = process_image(data)
             upload_to_r2(key, processed.data)
             self.db.add(
@@ -533,20 +538,22 @@ async def import_posts(db, wxr: WxrFile, media: MediaPipeline, limit: int | None
                     status=CommentStatus.approved if wp_comment["approved"] else CommentStatus.pending,
                     created_at=wp_comment["date_gmt"] or datetime.now(timezone.utc),
                 )
-                parent = comment_map.get(wp_comment["parent_wp_id"])
-                if parent:
-                    comment.parent_id = parent.id
                 db.add(comment)
-                await db.flush()
                 comment_map[wp_comment["wp_id"]] = comment
-                stats["comments"] += 1
             if wp_post.comments:
+                await db.flush()
+                for wp_comment in wp_post.comments:
+                    parent = comment_map.get(wp_comment["parent_wp_id"])
+                    if parent:
+                        comment_map[wp_comment["wp_id"]].parent_id = parent.id
                 await db.commit()
+                stats["comments"] += len(wp_post.comments)
         elif wp_post.comments:
             stats["comments_skipped_reimport"] = stats.get("comments_skipped_reimport", 0) + len(wp_post.comments)
 
         if wp_post.tag_names:
             await tag_service.sync_post_tags(db, post, wp_post.tag_names)
+            await db.commit()
 
         old_path = urlparse(wp_post.link).path.rstrip("/") if wp_post.link else ""
         if old_path and old_path.lstrip("/") and old_path != f"/{wp_post.slug}":

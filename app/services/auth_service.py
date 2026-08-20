@@ -86,15 +86,20 @@ async def rotate_refresh_token(
     if payload.get("type") != REFRESH:
         raise UnauthorizedException("Wrong token type")
 
-    row = await db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_token(token)))
-    if row is None or row.revoked:
+    result = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.token_hash == hash_token(token), RefreshToken.revoked.is_(False))
+        .values(revoked=True)
+        .returning(RefreshToken.user_id)
+    )
+    user_id = result.scalar_one_or_none()
+    if user_id is None:
         raise UnauthorizedException("Refresh token revoked or unknown")
 
-    user = await db.scalar(select(User).where(User.id == row.user_id))
+    user = await db.scalar(select(User).where(User.id == user_id))
     if user is None or not user.is_active:
         raise UnauthorizedException("User not found or inactive")
 
-    row.revoked = True
     refresh = await _issue_refresh_token(db, user, device_info)
     access = create_access_token(str(user.id), user.role.value)
     return user, access, refresh

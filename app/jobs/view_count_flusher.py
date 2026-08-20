@@ -1,55 +1,84 @@
+import json
 import logging
+from collections import Counter
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import insert, select, update
 
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
 from app.models import Post, PostView
+from app.services.view_service import VIEW_QUEUE
 
 logger = logging.getLogger(__name__)
+
+BATCH_SIZE = 500
+MAX_EVENTS_PER_RUN = 100_000
 
 
 async def flush_view_counts() -> None:
     r = get_redis()
-    cursor = 0
-    flushed = 0
-    while True:
-        cursor, keys = await r.scan(cursor, match="views:pending:*", count=100)
-        for key in keys:
-            try:
-                flushed += await _flush_one(key)
-            except Exception:
-                logger.exception("Failed to flush buffer %s", key)
-        if cursor == 0:
+    total = 0
+    while total < MAX_EVENTS_PER_RUN:
+        batch = await r.rpop(VIEW_QUEUE, count=BATCH_SIZE)
+        if not batch:
             break
-    if flushed:
-        logger.info("Flushed view counts for %d posts", flushed)
+        try:
+            total += await _flush_batch(batch)
+        except Exception:
+            logger.exception("Failed to flush a batch of %d view events", len(batch))
+    if total:
+        logger.info("Flushed %d view events", total)
 
 
-async def _flush_one(key: str) -> int:
-    post_id = key.removeprefix("views:pending:")
-    count = await get_redis().getdel(key)
-    if not count:
+async def _flush_batch(batch: list) -> int:
+    events = []
+    for raw in batch:
+        parsed = _parse_event(raw)
+        if parsed is not None:
+            events.append(parsed)
+    if not events:
         return 0
 
-    meta = await get_redis().hgetall(f"views:meta:{post_id}")
-    await get_redis().delete(f"views:meta:{post_id}")
-
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            update(Post).where(Post.id == UUID(post_id)).values(view_count=Post.view_count + int(count))
+        post_ids = {event["post_id"] for event in events}
+        existing = set(
+            await session.scalars(select(Post.id).where(Post.id.in_(post_ids)))
         )
-        if not result.rowcount:
+        events = [event for event in events if event["post_id"] in existing]
+        if not events:
             return 0
 
-        session.add(
-            PostView(
-                post_id=UUID(post_id),
-                ip_hash=meta.get("ip_hash") or None,
-                referrer=meta.get("referrer") or None,
-                user_agent=meta.get("user_agent") or None,
+        counts = Counter(event["post_id"] for event in events)
+        await session.execute(insert(PostView).values(events))
+        for post_id, count in counts.items():
+            await session.execute(
+                update(Post).where(Post.id == post_id).values(view_count=Post.view_count + count)
             )
-        )
         await session.commit()
-    return 1
+    return len(events)
+
+
+def _parse_event(raw) -> dict | None:
+    try:
+        event = json.loads(raw)
+        post_id = UUID(event["post_id"])
+    except (ValueError, KeyError, TypeError):
+        logger.warning("Dropping malformed view event")
+        return None
+
+    parsed = {"post_id": post_id}
+    for field in ("ip_hash", "referrer", "user_agent"):
+        value = event.get(field)
+        parsed[field] = value if value else None
+
+    viewed_at = event.get("viewed_at")
+    if viewed_at:
+        try:
+            parsed["viewed_at"] = datetime.fromisoformat(viewed_at)
+            return parsed
+        except ValueError:
+            pass
+    parsed["viewed_at"] = datetime.now(timezone.utc)
+    return parsed

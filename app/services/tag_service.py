@@ -49,8 +49,6 @@ async def sync_post_tags(db: AsyncSession, post: Post, names: list[str]) -> None
             await db.flush()
         db.add(PostTag(post_id=post.id, tag_id=tag.id))
 
-    await db.commit()
-
 
 async def post_tag_names(db: AsyncSession, post_id: UUID) -> list[str]:
     rows = await db.scalars(

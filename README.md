@@ -6,7 +6,7 @@ keeps URLs stable after the WordPress migration.
 
 ## Stack
 
-- Python 3.12, FastAPI, Pydantic v2
+- Python 3.14, FastAPI, Pydantic v2
 - PostgreSQL 16 with SQLAlchemy 2.0 async + Alembic
 - Redis 7 for cache, rate limiting and token blacklist
 - JWT auth with refresh token rotation, Argon2 password hashing

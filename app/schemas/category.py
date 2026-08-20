@@ -2,10 +2,11 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.common import RequestModel
 from app.utils.slugify import SLUG_PATTERN
 
 
-class CategoryCreate(BaseModel):
+class CategoryCreate(RequestModel):
     name: str = Field(min_length=1, max_length=100)
     slug: str | None = Field(default=None, max_length=120, pattern=SLUG_PATTERN)
     parent_id: uuid.UUID | None = None
@@ -18,7 +19,7 @@ class CategoryCreate(BaseModel):
     seo_description: str | None = None
 
 
-class CategoryUpdate(BaseModel):
+class CategoryUpdate(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     slug: str | None = Field(default=None, max_length=120, pattern=SLUG_PATTERN)
     parent_id: uuid.UUID | None = None
@@ -31,7 +32,7 @@ class CategoryUpdate(BaseModel):
     seo_description: str | None = None
 
 
-class ReorderItem(BaseModel):
+class ReorderItem(RequestModel):
     id: uuid.UUID
     order_index: int
     parent_id: uuid.UUID | None = None

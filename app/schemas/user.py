@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models import UserRole
+from app.schemas.common import RequestModel
 
 
 class UserOut(BaseModel):
@@ -21,7 +22,7 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     avatar_url: str | None = None
     bio: str | None = None

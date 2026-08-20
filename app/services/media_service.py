@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import boto3
 from botocore.config import Config
+from fastapi import UploadFile
 from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_WIDTH = 1920
 WEBP_QUALITY = 82
+CHUNK_SIZE = 1024 * 1024
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF"}
 
 _s3 = None
@@ -75,14 +77,22 @@ def process_image(file_bytes: bytes) -> ProcessedImage:
     return ProcessedImage(data=out.getvalue(), width=img.width, height=img.height)
 
 
-def upload_to_r2(key: str, data: bytes) -> str:
+def upload_to_r2(key: str, data: bytes, content_type: str = "image/webp") -> str:
     get_s3().put_object(
         Bucket=settings.r2_bucket_name,
         Key=key,
         Body=data,
-        ContentType="image/webp",
+        ContentType=content_type,
     )
     return f"{settings.r2_public_url.rstrip('/')}/{key}"
+
+
+def presign_get_url(key: str, expires_in: int = 300) -> str:
+    return get_s3().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.r2_bucket_name, "Key": key},
+        ExpiresIn=expires_in,
+    )
 
 
 def delete_from_r2(key: str) -> None:
@@ -97,6 +107,20 @@ def alt_text_from(filename: str) -> str:
     stem = filename.rsplit(".", 1)[0]
     words = [w for w in stem.replace("_", "-").replace("-", " ").split() if w]
     return " ".join(words).title() or "Uploaded image"
+
+
+async def read_upload(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValidationException("File exceeds the 10MB limit", code="FILE_TOO_LARGE")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 async def upload(

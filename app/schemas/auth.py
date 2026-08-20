@@ -1,35 +1,36 @@
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models import UserRole
+from app.schemas.common import RequestModel
 from app.schemas.user import UserOut
 
 
-class RegisterRequest(BaseModel):
+class RegisterRequest(RequestModel):
     name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     role: UserRole
 
 
-class RefreshRequest(BaseModel):
+class RefreshRequest(RequestModel):
     refresh_token: str
 
 
-class ForgotPasswordRequest(BaseModel):
+class ForgotPasswordRequest(RequestModel):
     email: EmailStr
 
 
-class ResetPasswordRequest(BaseModel):
+class ResetPasswordRequest(RequestModel):
     token: str
     new_password: str = Field(min_length=10, max_length=128)
 
 
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(RequestModel):
     current_password: str
     new_password: str = Field(min_length=10, max_length=128)
 
 
-class VerifyEmailRequest(BaseModel):
+class VerifyEmailRequest(RequestModel):
     token: str
 
 

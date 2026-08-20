@@ -14,8 +14,8 @@ from app.core.exceptions import (
 )
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
-from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostUpdate, SeoUpdate
-from app.services import audit_service, seo_service, tag_service, view_service
+from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostListItem, PostUpdate, SeoUpdate
+from app.services import audit_service, cache_service, seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
 from app.utils.slugify import slugify
@@ -54,7 +54,23 @@ async def list_public(
     if author_id is not None:
         conditions.append(Post.author_id == author_id)
 
-    return await _page(db, pagination, conditions)
+    cache_key = None
+    if category is None and tag is None and author_id is None:
+        if trending is None:
+            cache_key = cache_service.home_list_key(pagination.page, pagination.page_size)
+        elif trending is True:
+            cache_key = cache_service.trending_list_key(pagination.page, pagination.page_size)
+
+    if cache_key is not None:
+        cached = await cache_service.get_json(cache_key)
+        if cached is not None:
+            return cached
+
+    result = await _page(db, pagination, conditions)
+
+    if cache_key is not None:
+        await cache_service.set_json(cache_key, _page_json(result), cache_service.LIST_TTL)
+    return result
 
 
 async def get_by_slug(
@@ -64,6 +80,13 @@ async def get_by_slug(
     ip: str | None = None,
     referrer: str | None = None,
 ) -> PostDetail:
+    detail_key = cache_service.post_detail_key(slug)
+    cached = await cache_service.get_json(detail_key)
+    if cached is not None:
+        detail = PostDetail.model_validate(cached)
+        await view_service.register_view(str(detail.id), user_agent, ip, referrer)
+        return detail
+
     post = await db.scalar(
         select(Post).where(
             Post.slug == slug,
@@ -75,7 +98,9 @@ async def get_by_slug(
         raise NotFoundException("Post not found", code="POST_NOT_FOUND")
 
     await view_service.register_view(str(post.id), user_agent, ip, referrer)
-    return await _to_detail(db, post)
+    detail = await _to_detail(db, post)
+    await cache_service.set_json(detail_key, detail.model_dump(mode="json"), cache_service.POST_TTL)
+    return detail
 
 
 async def admin_list(
@@ -153,10 +178,11 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         schema_type=data.schema_type or "TechArticle",
     )
     db.add(post)
-    await db.commit()
-    await db.refresh(post)
+    await db.flush()
     if data.tags is not None:
         await tag_service.sync_post_tags(db, post, data.tags)
+    await db.commit()
+    await db.refresh(post)
     return await _to_detail(db, post)
 
 
@@ -167,6 +193,7 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         raise PermissionDeniedException()
 
     fields = data.model_fields_set
+    old_slug = post.slug
 
     if "slug" in fields and data.slug and data.slug != post.slug:
         if await db.scalar(select(Post).where(Post.slug == data.slug)):
@@ -188,6 +215,12 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
 
     await db.commit()
     await db.refresh(post)
+    await cache_service.delete_keys(
+        cache_service.post_detail_key(post.slug),
+        cache_service.post_detail_key(old_slug),
+    )
+    if post.slug != old_slug:
+        await seo_service.invalidate_sitemap()
     return await _to_detail(db, post)
 
 
@@ -200,6 +233,8 @@ async def soft_delete(db: AsyncSession, user: User, post_id: UUID) -> None:
     post.deleted_at = datetime.now(timezone.utc)
     audit_service.record(db, user.id, "post.delete", "post", post.id, {"slug": post.slug})
     await db.commit()
+    await cache_service.delete_keys(cache_service.post_detail_key(post.slug))
+    await _invalidate_list_caches()
 
 
 async def submit_review(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
@@ -238,6 +273,8 @@ async def publish(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     audit_service.record(db, user.id, "post.publish", "post", post.id, {"slug": post.slug})
     await db.commit()
     await db.refresh(post)
+    await cache_service.delete_keys(cache_service.post_detail_key(post.slug))
+    await _invalidate_list_caches()
     await seo_service.invalidate_sitemap()
     return await _to_detail(db, post)
 
@@ -301,7 +338,23 @@ async def update_seo(db: AsyncSession, post_id: UUID, data: SeoUpdate) -> PostDe
 
     await db.commit()
     await db.refresh(post)
+    await cache_service.delete_keys(cache_service.post_detail_key(post.slug))
     return await _to_detail(db, post)
+
+
+async def _invalidate_list_caches() -> None:
+    await cache_service.delete_pattern("posts:home:*")
+    await cache_service.delete_pattern("posts:trending:*")
+
+
+def _page_json(result: dict) -> dict:
+    return {
+        "items": [PostListItem.model_validate(post).model_dump(mode="json") for post in result["items"]],
+        "total": result["total"],
+        "page": result["page"],
+        "page_size": result["page_size"],
+        "total_pages": result["total_pages"],
+    }
 
 
 async def _page(db: AsyncSession, pagination: PaginationParams, conditions: list) -> dict:

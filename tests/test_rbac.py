@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
-from app.models import Comment, Post, PostStatus, User, UserRole
+from app.models import AuditLog, Comment, Post, PostStatus, RefreshToken, User, UserRole
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +20,12 @@ async def _cleanup():
         for post in posts:
             await db.execute(delete(Comment).where(Comment.post_id == post.id))
         await db.execute(delete(Post).where(Post.slug.like("rbac-test-post-%")))
+        users = (await db.scalars(select(User).where(User.email.like("rbac-test-%")))).all()
+        if users:
+            user_ids = [user.id for user in users]
+            await db.execute(delete(AuditLog).where(AuditLog.entity_id.in_(user_ids)))
+            await db.execute(delete(RefreshToken).where(RefreshToken.user_id.in_(user_ids)))
+            await db.execute(delete(User).where(User.id.in_(user_ids)))
         await db.commit()
 
 
@@ -27,6 +33,57 @@ async def login(client, email, password):
     response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def register_rbac_user(client, admin_token, role="seo_specialist") -> dict:
+    marker = uuid4().hex[:8]
+    response = await client.post(
+        "/api/v1/auth/register",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "name": "Rbac Tester",
+            "email": f"rbac-test-{marker}@example.com",
+            "password": "RbacPass123!",
+            "role": role,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_super_admin_cannot_deactivate_self_via_patch(client, admin_token):
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
+    own_id = me.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/users/{own_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"is_active": False},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "SELF_DEACTIVATION"
+
+    fresh = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
+    assert fresh.status_code == 200
+
+
+async def test_patch_deactivation_revokes_sessions(client, admin_token):
+    created = await register_rbac_user(client, admin_token)
+    session = await client.post(
+        "/api/v1/auth/login",
+        data={"username": created["email"], "password": "RbacPass123!"},
+    )
+    refresh = session.json()["refresh_token"]
+
+    response = await client.patch(
+        f"/api/v1/users/{created['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"is_active": False},
+    )
+    assert response.status_code == 200, response.text
+
+    replay = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
+    assert replay.status_code == 401
 
 
 async def create_post(client, headers, marker):

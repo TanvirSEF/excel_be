@@ -50,6 +50,12 @@ async def update_user(
     if current_user.role != UserRole.super_admin and fields & ADMIN_ONLY_FIELDS:
         raise PermissionDeniedException("Only a super admin can change these fields")
 
+    if "is_active" in fields and data.is_active is False and user.id == current_user.id:
+        raise ValidationException(
+            "You cannot deactivate your own account", code="SELF_DEACTIVATION"
+        )
+
+    was_active = user.is_active
     changes = {
         field: {
             "before": audit_service.jsonable(getattr(user, field)),
@@ -59,6 +65,11 @@ async def update_user(
     }
     for field in fields:
         setattr(user, field, getattr(data, field))
+
+    if was_active and not user.is_active:
+        await db.execute(
+            update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
+        )
 
     action = "user.role_change" if "role" in fields else "user.update"
     audit_service.record(db, current_user.id, action, "user", user.id, {"changes": changes})

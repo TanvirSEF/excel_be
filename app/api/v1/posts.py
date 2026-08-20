@@ -1,13 +1,14 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
 from app.deps.pagination import PaginationParams
 from app.deps.rate_limit import comment_rate_limit
-from app.models import PostStatus, User, UserRole
+from app.models import DownloadableAsset, PostStatus, User, UserRole
+from app.schemas.asset import AssetOut
 from app.schemas.common import Page
 from app.schemas.comment import CommentCreate, CommentOut
 from app.schemas.post import (
@@ -20,7 +21,7 @@ from app.schemas.post import (
     ScheduleRequest,
     SeoUpdate,
 )
-from app.services import comment_service, post_service
+from app.services import asset_service, comment_service, post_service
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -60,6 +61,24 @@ async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(ge
         ip=request.client.host if request.client else None,
         referrer=request.headers.get("referer"),
     )
+
+
+@router.get("/{post_id}/assets", response_model=list[AssetOut])
+async def list_assets(
+    post_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[DownloadableAsset]:
+    return await asset_service.list_for_post(db, post_id)
+
+
+@router.post("/{post_id}/assets", response_model=AssetOut, status_code=201)
+async def attach_asset(
+    post_id: UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(require_role(*WRITERS)),
+    db: AsyncSession = Depends(get_db),
+) -> DownloadableAsset:
+    return await asset_service.attach(db, post_id, file)
 
 
 @router.get("/{post_id}/comments", response_model=list[CommentOut])

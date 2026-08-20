@@ -4,16 +4,17 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models import CommentStatus
+from app.schemas.common import RequestModel
 
 
-class CommentCreate(BaseModel):
+class CommentCreate(RequestModel):
     user_name: str = Field(min_length=1, max_length=100)
     user_email: EmailStr
     comment_text: str = Field(min_length=1)
     parent_id: uuid.UUID | None = None
 
 
-class ModerateRequest(BaseModel):
+class ModerateRequest(RequestModel):
     status: CommentStatus
 
 

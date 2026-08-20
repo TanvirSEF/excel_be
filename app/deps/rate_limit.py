@@ -90,3 +90,11 @@ def comment_rate_limit() -> Callable[..., Awaitable[None]]:
 
 def newsletter_rate_limit() -> Callable[..., Awaitable[None]]:
     return rate_limit("newsletter", settings.rate_limit_newsletter)
+
+
+def forgot_password_rate_limit() -> Callable[..., Awaitable[None]]:
+    return rate_limit("forgot-password", settings.rate_limit_forgot_password)
+
+
+def reset_password_rate_limit() -> Callable[..., Awaitable[None]]:
+    return rate_limit("reset-password", settings.rate_limit_reset_password)

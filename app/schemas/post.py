@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import PostStatus
+from app.schemas.common import RequestModel
 from app.utils.slugify import SLUG_PATTERN
 
 
@@ -21,7 +22,7 @@ class PostListItem(BaseModel):
     published_at: datetime | None
 
 
-class PostCreate(BaseModel):
+class PostCreate(RequestModel):
     title: str = Field(min_length=1, max_length=255)
     slug: str | None = Field(default=None, max_length=255, pattern=SLUG_PATTERN)
     excerpt: str | None = Field(default=None, max_length=500)
@@ -36,7 +37,7 @@ class PostCreate(BaseModel):
     schema_type: str | None = Field(default=None, max_length=50)
 
 
-class PostUpdate(BaseModel):
+class PostUpdate(RequestModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     slug: str | None = Field(default=None, max_length=255, pattern=SLUG_PATTERN)
     excerpt: str | None = Field(default=None, max_length=500)
@@ -97,15 +98,15 @@ class PostAdminItem(BaseModel):
     published_at: datetime | None = None
 
 
-class RejectRequest(BaseModel):
+class RejectRequest(RequestModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
-class ScheduleRequest(BaseModel):
+class ScheduleRequest(RequestModel):
     scheduled_at: datetime
 
 
-class SeoUpdate(BaseModel):
+class SeoUpdate(RequestModel):
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
     canonical_url: str | None = None

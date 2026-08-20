@@ -1,3 +1,4 @@
+import asyncio
 from uuid import uuid4
 
 import pytest
@@ -92,6 +93,20 @@ async def test_refresh_rotation_revokes_old_token(client, admin_token):
     assert again.status_code == 200
 
 
+async def test_concurrent_refresh_rotation_single_use(client, admin_token):
+    created = await register_user(client, admin_token)
+    session = await login(client, created["email"], "AuthPass123!")
+    refresh = session.json()["refresh_token"]
+
+    responses = await asyncio.gather(
+        client.post("/api/v1/auth/refresh", json={"refresh_token": refresh}),
+        client.post("/api/v1/auth/refresh", json={"refresh_token": refresh}),
+    )
+
+    statuses = sorted(response.status_code for response in responses)
+    assert statuses == [200, 401]
+
+
 async def test_logout_revokes_refresh_token(client, admin_token):
     created = await register_user(client, admin_token)
     session = await login(client, created["email"], "AuthPass123!")
@@ -111,3 +126,25 @@ async def test_logout_revokes_refresh_token(client, admin_token):
 async def test_me_requires_token(client):
     response = await client.get("/api/v1/auth/me")
     assert response.status_code in (401, 403)
+
+
+async def test_forgot_password_is_rate_limited(client):
+    responses = [
+        await client.post("/api/v1/auth/forgot-password", json={"email": "nobody@example.com"})
+        for _ in range(6)
+    ]
+    assert [response.status_code for response in responses[:5]] == [200] * 5
+    assert responses[5].status_code == 429
+    assert responses[5].json()["error"]["code"] == "RATE_LIMITED"
+
+
+async def test_reset_password_is_rate_limited(client):
+    statuses = []
+    for _ in range(11):
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "not-a-real-token", "new_password": "NewPass123!"},
+        )
+        statuses.append(response.status_code)
+    assert statuses[:10] == [400] * 10
+    assert statuses[10] == 429

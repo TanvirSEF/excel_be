@@ -6,8 +6,37 @@ from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal, engine
 from app.core.redis_client import close_redis, get_redis
+from app.core.security import hash_password
 from app.main import app
 from app.models import Category, Post, PostStatus, User, UserRole
+
+EDITOR_EMAIL = "editor@test.com"
+EDITOR_PASSWORD = "FinalPass789!!"
+
+TEST_USERS = [
+    ("Senior Editor", "editor@test.com", "FinalPass789!!", UserRole.senior_editor),
+    ("Test Writer", "writer@test.com", "WriterPass123!", UserRole.technical_writer),
+    ("Test SEO", "seo@test.com", "SeoPass12345!", UserRole.seo_specialist),
+]
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def ensure_test_users() -> None:
+    async with AsyncSessionLocal() as db:
+        for name, email, password, role in TEST_USERS:
+            existing = await db.scalar(select(User).where(User.email == email))
+            if existing is None:
+                db.add(
+                    User(
+                        name=name,
+                        email=email,
+                        password_hash=hash_password(password),
+                        role=role,
+                        is_active=True,
+                        is_verified=True,
+                    )
+                )
+        await db.commit()
 
 
 @pytest.fixture(autouse=True)

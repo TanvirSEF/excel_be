@@ -4,7 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
-from app.deps.rate_limit import login_rate_limit
+from app.deps.rate_limit import (
+    forgot_password_rate_limit,
+    login_rate_limit,
+    reset_password_rate_limit,
+)
 from app.models import User, UserRole
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -64,7 +68,9 @@ async def logout(
     return {"message": "Logged out"}
 
 
-@router.post("/forgot-password")
+@router.post(
+    "/forgot-password", dependencies=[Depends(forgot_password_rate_limit())]
+)
 async def forgot_password(
     data: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
@@ -73,7 +79,7 @@ async def forgot_password(
     return {"message": "If the email exists, a reset link has been sent"}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(reset_password_rate_limit())])
 async def reset_password(
     data: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),
