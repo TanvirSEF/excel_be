@@ -8,7 +8,7 @@ from app.deps.auth_deps import require_role
 from app.deps.pagination import PaginationParams
 from app.models import Media, User, UserRole
 from app.schemas.common import Page
-from app.schemas.media import MediaOut
+from app.schemas.media import MediaOut, MediaUpdate
 from app.services import media_service
 
 router = APIRouter(prefix="/media", tags=["media"])
@@ -36,6 +36,16 @@ async def list_media(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await media_service.list_media(db, pagination, folder)
+
+
+@router.patch("/{media_id}", response_model=MediaOut)
+async def update_media(
+    media_id: UUID,
+    data: MediaUpdate,
+    user: User = Depends(require_role(*WRITERS)),
+    db: AsyncSession = Depends(get_db),
+) -> Media:
+    return await media_service.update_media(db, media_id, data)
 
 
 @router.delete("/{media_id}")

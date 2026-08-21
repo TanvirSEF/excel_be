@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.deps.pagination import PaginationParams
 from app.models import Media, Post, PostStatus, User
+from app.schemas.media import MediaUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,19 @@ async def list_media(
         "page_size": pagination.page_size,
         "total_pages": math.ceil(total / pagination.page_size) if total else 0,
     }
+
+
+async def update_media(db: AsyncSession, media_id: UUID, data: MediaUpdate) -> Media:
+    media = await db.scalar(select(Media).where(Media.id == media_id))
+    if media is None:
+        raise NotFoundException("Media not found", code="MEDIA_NOT_FOUND")
+
+    for field in data.model_fields_set:
+        setattr(media, field, getattr(data, field))
+
+    await db.commit()
+    await db.refresh(media)
+    return media
 
 
 async def delete_media(db: AsyncSession, media_id: UUID) -> None:

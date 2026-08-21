@@ -1,7 +1,14 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.common import RequestModel
+
+
+class MediaUpdate(RequestModel):
+    alt_text: str | None = Field(default=None, max_length=255)
+    folder: str | None = Field(default=None, max_length=100)
 
 
 class MediaOut(BaseModel):

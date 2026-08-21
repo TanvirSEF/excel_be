@@ -48,6 +48,81 @@ async def current_tags(post_id: UUID) -> list[str]:
         return await tag_service.post_tag_names(db, post_id)
 
 
+async def login(client: httpx.AsyncClient, email: str, password: str) -> dict:
+    response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def get_token(client: httpx.AsyncClient, email: str, password: str) -> str:
+    response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
+    assert response.status_code == 200, response.text
+    return response.json()["access_token"]
+
+
+async def test_get_by_id_returns_draft_for_editor(client, admin_token):
+    post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.get(
+        f"/api/v1/posts/{post['id']}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["id"] == post["id"]
+    assert body["status"] == "draft"
+    assert body["content_json"] == {"blocks": [{"type": "paragraph", "text": "body"}]}
+
+
+async def test_get_by_id_allows_writer_for_own_post(client):
+    writer_token = await get_token(client, "writer@test.com", "WriterPass123!")
+    post = await create_post(client, writer_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.get(
+        f"/api/v1/posts/{post['id']}", headers={"Authorization": f"Bearer {writer_token}"}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == post["id"]
+
+
+async def test_get_by_id_scopes_writers_to_own_posts(client, admin_token):
+    writer_headers = await login(client, "writer@test.com", "WriterPass123!")
+    post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.get(f"/api/v1/posts/{post['id']}", headers=writer_headers)
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
+
+
+async def test_get_by_id_forbidden_for_seo_specialist(client, admin_token):
+    seo_headers = await login(client, "seo@test.com", "SeoPass12345!")
+    post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.get(f"/api/v1/posts/{post['id']}", headers=seo_headers)
+    assert response.status_code == 403
+
+
+async def test_get_by_id_requires_auth(client, admin_token):
+    post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.get(f"/api/v1/posts/{post['id']}")
+    assert response.status_code == 401
+
+
+async def test_get_by_id_unknown_uuid_returns_404(client, admin_token):
+    response = await client.get(
+        f"/api/v1/posts/{uuid4()}", headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "POST_NOT_FOUND"
+
+
+async def test_get_by_non_uuid_path_still_resolves_as_slug(client, admin_token):
+    response = await client.get("/api/v1/posts/posts-test-not-a-uuid")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "POST_NOT_FOUND"
+
+
 async def test_create_with_tags_persists_single_transaction(client, admin_token):
     post = await create_post(
         client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}", tags=["Alpha Tag", "Beta Tag"]

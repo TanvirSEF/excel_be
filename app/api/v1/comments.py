@@ -1,17 +1,29 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import require_role
-from app.models import Comment, User, UserRole
-from app.schemas.comment import ModerateRequest
+from app.deps.pagination import PaginationParams
+from app.models import Comment, CommentStatus, User, UserRole
+from app.schemas.comment import CommentAdminItem, ModerateRequest
+from app.schemas.common import Page
 from app.services import comment_service
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
 EDITORS = (UserRole.super_admin, UserRole.senior_editor)
+
+
+@router.get("", response_model=Page[CommentAdminItem])
+async def admin_list(
+    pagination: PaginationParams = Depends(),
+    status: CommentStatus | None = Query(None),
+    user: User = Depends(require_role(*EDITORS)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return await comment_service.admin_list(db, pagination, status)
 
 
 @router.patch("/{comment_id}/moderate")

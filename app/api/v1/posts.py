@@ -52,6 +52,15 @@ async def admin_list(
     return await post_service.admin_list(db, user, pagination, status)
 
 
+@router.get("/{post_id:uuid}", response_model=PostDetail)
+async def get_by_id(
+    post_id: UUID,
+    user: User = Depends(require_role(*WRITERS)),
+    db: AsyncSession = Depends(get_db),
+) -> PostDetail:
+    return await post_service.get_by_id(db, user, post_id)
+
+
 @router.get("/{slug}", response_model=PostDetail)
 async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(get_db)) -> PostDetail:
     return await post_service.get_by_slug(

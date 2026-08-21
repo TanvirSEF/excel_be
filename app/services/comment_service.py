@@ -1,11 +1,13 @@
+import math
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, NotFoundException
+from app.deps.pagination import PaginationParams
 from app.models import Comment, CommentStatus, Post, PostStatus
-from app.schemas.comment import CommentCreate, CommentOut
+from app.schemas.comment import CommentAdminItem, CommentCreate, CommentOut
 
 
 async def list_for_post(db: AsyncSession, post_id: UUID) -> list[CommentOut]:
@@ -37,6 +39,43 @@ async def list_for_post(db: AsyncSession, post_id: UUID) -> list[CommentOut]:
         return out
 
     return [to_node(root) for root in children_of.get(None, [])]
+
+
+async def admin_list(
+    db: AsyncSession,
+    pagination: PaginationParams,
+    status: CommentStatus | None = None,
+) -> dict:
+    conditions = []
+    if status is not None:
+        conditions.append(Comment.status == status)
+
+    total = await db.scalar(select(func.count()).select_from(Comment).where(*conditions))
+    rows = (
+        await db.execute(
+            select(Comment, Post.title, Post.slug)
+            .join(Post, Comment.post_id == Post.id)
+            .where(*conditions)
+            .order_by(Comment.created_at.desc())
+            .offset(pagination.offset)
+            .limit(pagination.page_size)
+        )
+    ).all()
+
+    items = []
+    for comment, post_title, post_slug in rows:
+        item = CommentAdminItem.model_validate(comment)
+        item.post_title = post_title
+        item.post_slug = post_slug
+        items.append(item)
+
+    return {
+        "items": items,
+        "total": total,
+        "page": pagination.page,
+        "page_size": pagination.page_size,
+        "total_pages": math.ceil(total / pagination.page_size) if total else 0,
+    }
 
 
 async def create(db: AsyncSession, post_id: UUID, data: CommentCreate, ip: str | None) -> Comment:

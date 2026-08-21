@@ -30,3 +30,19 @@ class CommentOut(BaseModel):
 
 
 CommentOut.model_rebuild()
+
+
+class CommentAdminItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    post_id: uuid.UUID
+    parent_id: uuid.UUID | None
+    user_name: str
+    user_email: str
+    comment_text: str
+    status: CommentStatus
+    ip_address: str | None
+    created_at: datetime
+    post_title: str = ""
+    post_slug: str = ""
