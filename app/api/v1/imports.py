@@ -22,8 +22,8 @@ async def wordpress_import(
         raise ValidationException("Only .xml WXR export files are accepted")
 
     content = await file.read()
-    if len(content) > 50 * 1024 * 1024:
-        raise ValidationException("File too large — maximum 50 MB")
+    if len(content) > 300 * 1024 * 1024:
+        raise ValidationException("File too large — maximum 300 MB")
 
     result: ImportResult = await run_import(
         db=db,
