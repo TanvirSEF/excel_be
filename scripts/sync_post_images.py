@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models import Media, Post, User, UserRole
-from app.services.media_service import upload_to_r2, process_image
+from app.services.media_service import get_s3, upload_to_r2, process_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("sync_images")
@@ -24,8 +24,26 @@ IMG_SRC_RE = re.compile(r'https?://[^\s"\'<>]+\.(?:png|jpe?g|webp|gif)', re.IGNO
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 
 
+def robust_upload_to_r2(key: str, data: bytes, content_type: str = "image/webp") -> str:
+    s3 = get_s3()
+    for attempt in range(4):
+        try:
+            s3.put_object(
+                Bucket=settings.r2_bucket_name,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+            )
+            return f"{settings.r2_public_url.rstrip('/')}/{key}"
+        except Exception as e:
+            if attempt == 3:
+                raise
+            import time
+            time.sleep(0.5 * (attempt + 1))
+
+
 class ImageSyncPipeline:
-    def __init__(self, admin_user_id, dry_run: bool = False, sem_count: int = 10):
+    def __init__(self, admin_user_id, dry_run: bool = False, sem_count: int = 5):
         self.admin_id = admin_user_id
         self.dry_run = dry_run
         self.cache: dict[str, str] = {}
@@ -38,7 +56,6 @@ class ImageSyncPipeline:
         if not clean_url or not clean_url.startswith("http"):
             return url
 
-        # Fast memory cache check
         if clean_url in self.cache:
             return self.cache[clean_url]
 
@@ -64,21 +81,25 @@ class ImageSyncPipeline:
             except Exception:
                 pass
 
-            # Download from WP host
-            try:
-                resp = await client.get(clean_url, timeout=25.0)
-                if resp.status_code != 200:
-                    self.failed_urls.append(clean_url)
-                    return url
-                raw_bytes = resp.content
-                if len(raw_bytes) > MAX_DOWNLOAD_BYTES:
-                    self.failed_urls.append(clean_url)
-                    return url
-            except Exception:
+            # Download with retry
+            raw_bytes = None
+            for dl_attempt in range(3):
+                try:
+                    resp = await client.get(clean_url, timeout=25.0)
+                    if resp.status_code == 200:
+                        raw_bytes = resp.content
+                        break
+                    elif resp.status_code == 404:
+                        self.failed_urls.append(clean_url)
+                        return url
+                except Exception:
+                    await asyncio.sleep(0.5)
+
+            if not raw_bytes or len(raw_bytes) > MAX_DOWNLOAD_BYTES:
                 self.failed_urls.append(clean_url)
                 return url
 
-            # Optimize & Upload to R2
+            # Optimize & Upload to R2 with retry
             try:
                 parsed = urlparse(clean_url)
                 filename = parsed.path.split("/")[-1] or "image.jpg"
@@ -87,7 +108,7 @@ class ImageSyncPipeline:
                 r2_key = f"images/{now:%Y/%m}/{stem}-{url_hash[:8]}.webp"
 
                 processed = await asyncio.to_thread(process_image, raw_bytes)
-                r2_url = await asyncio.to_thread(upload_to_r2, r2_key, processed.data, "image/webp")
+                r2_url = await asyncio.to_thread(robust_upload_to_r2, r2_key, processed.data, "image/webp")
 
                 async with AsyncSessionLocal() as session:
                     media = Media(
@@ -120,7 +141,7 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
             return
         admin_id = admin.id
 
-        pipeline = ImageSyncPipeline(admin_id, dry_run=dry_run, sem_count=10)
+        pipeline = ImageSyncPipeline(admin_id, dry_run=dry_run, sem_count=5)
 
         # Preload DB media
         logger.info("Loading existing R2 media cache from database...")
@@ -129,7 +150,6 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
             pipeline.cache[m.alt_text] = m.file_url
         logger.info(f"Loaded {len(media_rows)} existing images into fast cache.")
 
-        # Find posts that still have WordPress image URLs
         query = select(Post.id, Post.title, Post.slug, Post.featured_image_url, Post.content_html, Post.content_json)
         query = query.order_by(Post.created_at.desc())
         if limit:
@@ -137,7 +157,6 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
 
         posts_data = (await db.execute(query)).all()
 
-    # Filter posts that actually contain WP images (.png/.jpg/.webp)
     candidates = []
     for row in posts_data:
         post_id, title, slug, featured, html, content_json = row
@@ -156,7 +175,7 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
 
     updated_posts = 0
 
-    limits = httpx.Limits(max_keepalive_connections=30, max_connections=50)
+    limits = httpx.Limits(max_keepalive_connections=20, max_connections=30)
     async with httpx.AsyncClient(limits=limits, follow_redirects=True) as http_client:
         for idx, (row, wp_images) in enumerate(candidates, start=1):
             post_id, title, slug, featured, html, content_json = row
@@ -164,14 +183,14 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
             html = html or ""
             featured = featured or ""
 
-            # Check featured image
+            # Featured image
             if "wp-content/uploads" in featured and any(featured.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
                 new_featured = await pipeline.get_or_upload_image(http_client, featured)
                 if new_featured != featured:
                     featured = new_featured
                     changed = True
 
-            # Concurrent fetch of all body images
+            # Body images
             unique_imgs = list(set(wp_images))
             if unique_imgs:
                 tasks = [pipeline.get_or_upload_image(http_client, img) for img in unique_imgs]
@@ -183,7 +202,6 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
                         changed = True
 
             if changed:
-                # Update content_json blocks
                 if content_json and "blocks" in content_json:
                     blocks = content_json["blocks"]
                     for block in blocks:
@@ -236,7 +254,7 @@ async def sync_all_posts(limit: int | None = None, dry_run: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Clean high-speed image sync to R2")
+    parser = argparse.ArgumentParser(description="Zero-Drop Robust High-Speed Image Sync to R2")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of posts to process")
     parser.add_argument("--dry-run", action="store_true", help="Scan and simulate only, no writes")
     args = parser.parse_args()
