@@ -41,3 +41,76 @@ async def test_malformed_json_uses_envelope(client):
     )
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+async def _writer_headers(client):
+    response = await client.post(
+        "/api/v1/auth/login", data={"username": "writer@test.com", "password": "WriterPass123!"}
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def test_post_content_requires_blocks_list(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={"title": "Validation test", "content_json": {"nope": True}},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
+
+
+async def test_post_content_rejects_unknown_block_type(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Validation test",
+            "content_json": {"blocks": [{"type": "script", "text": "alert(1)"}]},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
+
+
+async def test_post_content_rejects_oversized_payload(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Validation test",
+            "content_json": {"blocks": [{"type": "paragraph", "text": "x" * 600000}]},
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
+
+
+async def test_post_content_accepts_all_supported_blocks(client, admin_token):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Block coverage test",
+            "content_json": {
+                "blocks": [
+                    {"type": "paragraph", "text": "intro"},
+                    {"type": "heading", "text": "section", "level": 2},
+                    {"type": "quote", "text": "quoted"},
+                    {"type": "code", "text": "SUM(A1:A9)", "language": "formula"},
+                    {"type": "list", "items": ["one", "two"], "ordered": True},
+                    {"type": "html", "html": "<div>embed</div>"},
+                    {"type": "image", "url": "https://example.com/a.png", "alt": "chart"},
+                    {"type": "table", "rows": [["a", "b"], ["c", "d"]], "header": True},
+                ]
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    post_id = response.json()["id"]
+    await client.delete(f"/api/v1/posts/{post_id}", headers={"Authorization": f"Bearer {admin_token}"})

@@ -55,6 +55,14 @@ async def update_user(
             "You cannot deactivate your own account", code="SELF_DEACTIVATION"
         )
 
+    if await _is_last_super_admin(db, user):
+        loses_admin = "role" in fields and data.role != UserRole.super_admin
+        gets_deactivated = "is_active" in fields and data.is_active is False
+        if loses_admin or gets_deactivated:
+            raise ValidationException(
+                "Cannot remove the last active super admin", code="LAST_SUPER_ADMIN"
+            )
+
     was_active = user.is_active
     changes = {
         field: {
@@ -88,9 +96,29 @@ async def deactivate_user(db: AsyncSession, current_user: User, user_id: UUID) -
     if user is None:
         raise NotFoundException("User not found", code="USER_NOT_FOUND")
 
+    if await _is_last_super_admin(db, user):
+        raise ValidationException(
+            "Cannot remove the last active super admin", code="LAST_SUPER_ADMIN"
+        )
+
     user.is_active = False
     await db.execute(
         update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
     )
     audit_service.record(db, current_user.id, "user.deactivate", "user", user.id)
     await db.commit()
+
+
+async def _is_last_super_admin(db: AsyncSession, user: User) -> bool:
+    if user.role != UserRole.super_admin or not user.is_active:
+        return False
+    others = await db.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.role == UserRole.super_admin,
+            User.is_active,
+            User.id != user.id,
+        )
+    )
+    return others == 0

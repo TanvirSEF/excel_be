@@ -36,6 +36,8 @@ async def ensure_test_users() -> None:
                         is_verified=True,
                     )
                 )
+            elif not existing.is_active:
+                existing.is_active = True
         await db.commit()
 
 

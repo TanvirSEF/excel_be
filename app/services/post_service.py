@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -187,7 +188,22 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         schema_type=data.schema_type or "TechArticle",
     )
     db.add(post)
-    await db.flush()
+    for _ in range(3):
+        try:
+            await db.flush()
+            break
+        except IntegrityError:
+            await db.rollback()
+            if data.slug:
+                raise ConflictException("Slug already taken", code="SLUG_TAKEN")
+            post.slug = await _unique_slug(db, slugify(data.title))
+            if not post.slug:
+                raise ValidationException(
+                    "Could not generate a slug from this title", code="SLUG_REQUIRED"
+                )
+            db.add(post)
+    else:
+        raise ConflictException("Slug already taken", code="SLUG_TAKEN")
     if data.tags is not None:
         await tag_service.sync_post_tags(db, post, data.tags)
     await db.commit()
@@ -222,7 +238,11 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         post.content_html = _render_html(post.content_json)
         post.reading_time_minutes = reading_time_minutes(post.content_json)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise ConflictException("Slug already taken", code="SLUG_TAKEN")
     await db.refresh(post)
     await cache_service.delete_keys(
         cache_service.post_detail_key(post.slug),

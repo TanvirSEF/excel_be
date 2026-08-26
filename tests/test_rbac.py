@@ -4,7 +4,11 @@ import pytest
 from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
+from app.core.exceptions import ValidationException
+from app.core.security import hash_password
 from app.models import AuditLog, Comment, Post, PostStatus, RefreshToken, User, UserRole
+from app.schemas.user import UserUpdate
+from app.services import user_service
 
 
 @pytest.fixture(autouse=True)
@@ -174,3 +178,94 @@ async def test_comment_moderation_editor_only(client, published_post):
     )
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
+
+
+async def _make_sole_super_admin() -> tuple[User, User]:
+    marker = uuid4().hex[:8]
+    async with AsyncSessionLocal() as db:
+        seeded = await db.scalar(select(User).where(User.email == "admin@excelinsider.com"))
+        seeded.is_active = False
+        target = User(
+            name="Rbac Tester",
+            email=f"rbac-test-{marker}@example.com",
+            password_hash=hash_password("RbacPass123!"),
+            role=UserRole.super_admin,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(target)
+        await db.commit()
+        await db.refresh(target)
+        return seeded, target
+
+
+async def _restore_super_admins(seeded: User, target: User) -> None:
+    async with AsyncSessionLocal() as db:
+        seeded = await db.scalar(select(User).where(User.id == seeded.id))
+        seeded.is_active = True
+        stale = await db.scalar(select(User).where(User.id == target.id))
+        if stale is not None:
+            await db.delete(stale)
+        await db.commit()
+
+
+async def test_last_super_admin_cannot_be_demoted():
+    seeded, target = await _make_sole_super_admin()
+    try:
+        async with AsyncSessionLocal() as db:
+            current = User(id=seeded.id, role=UserRole.super_admin)
+            with pytest.raises(ValidationException) as exc:
+                await user_service.update_user(
+                    db, current, target.id, UserUpdate(role=UserRole.senior_editor)
+                )
+            assert exc.value.code == "LAST_SUPER_ADMIN"
+    finally:
+        await _restore_super_admins(seeded, target)
+
+
+async def test_last_super_admin_cannot_be_deactivated_via_patch():
+    seeded, target = await _make_sole_super_admin()
+    try:
+        async with AsyncSessionLocal() as db:
+            current = User(id=seeded.id, role=UserRole.super_admin)
+            with pytest.raises(ValidationException) as exc:
+                await user_service.update_user(
+                    db, current, target.id, UserUpdate(is_active=False)
+                )
+            assert exc.value.code == "LAST_SUPER_ADMIN"
+    finally:
+        await _restore_super_admins(seeded, target)
+
+
+async def test_last_super_admin_cannot_be_deactivated():
+    seeded, target = await _make_sole_super_admin()
+    try:
+        async with AsyncSessionLocal() as db:
+            current = User(id=seeded.id, role=UserRole.super_admin)
+            with pytest.raises(ValidationException) as exc:
+                await user_service.deactivate_user(db, current, target.id)
+            assert exc.value.code == "LAST_SUPER_ADMIN"
+    finally:
+        await _restore_super_admins(seeded, target)
+
+
+async def test_super_admin_demotes_when_another_remains():
+    marker = uuid4().hex[:8]
+    async with AsyncSessionLocal() as db:
+        seeded = await db.scalar(select(User).where(User.email == "admin@excelinsider.com"))
+        target = User(
+            name="Rbac Tester",
+            email=f"rbac-test-{marker}@example.com",
+            password_hash=hash_password("RbacPass123!"),
+            role=UserRole.super_admin,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(target)
+        await db.commit()
+        await db.refresh(target)
+        current = User(id=seeded.id, role=UserRole.super_admin)
+        updated = await user_service.update_user(
+            db, current, target.id, UserUpdate(role=UserRole.seo_specialist)
+        )
+        assert updated.role == UserRole.seo_specialist

@@ -1,11 +1,34 @@
+import json
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import PostStatus
 from app.schemas.common import RequestModel
 from app.utils.slugify import SLUG_PATTERN
+
+ALLOWED_BLOCK_TYPES = frozenset(
+    {"paragraph", "heading", "quote", "code", "list", "html", "image", "table"}
+)
+MAX_BLOCKS = 2000
+MAX_CONTENT_JSON_BYTES = 512 * 1024
+
+
+def _validate_content(value: dict | None) -> dict | None:
+    if value is None:
+        return value
+    blocks = value.get("blocks")
+    if not isinstance(blocks, list):
+        raise ValueError("content_json must contain a 'blocks' list")
+    if len(blocks) > MAX_BLOCKS:
+        raise ValueError(f"content_json cannot exceed {MAX_BLOCKS} blocks")
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") not in ALLOWED_BLOCK_TYPES:
+            raise ValueError("every block must be an object with a supported type")
+    if len(json.dumps(value)) > MAX_CONTENT_JSON_BYTES:
+        raise ValueError("content_json is too large")
+    return value
 
 
 class PostListItem(BaseModel):
@@ -36,6 +59,8 @@ class PostCreate(RequestModel):
     og_image_url: str | None = None
     schema_type: str | None = Field(default=None, max_length=50)
 
+    _check_content = field_validator("content_json")(_validate_content)
+
 
 class PostUpdate(RequestModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
@@ -50,6 +75,8 @@ class PostUpdate(RequestModel):
     canonical_url: str | None = None
     og_image_url: str | None = None
     schema_type: str | None = Field(default=None, max_length=50)
+
+    _check_content = field_validator("content_json")(_validate_content)
 
 
 class PostDetail(BaseModel):
