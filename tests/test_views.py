@@ -1,8 +1,9 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
@@ -154,10 +155,31 @@ async def test_parallel_views_flush_exactly_once():
     assert fresh.view_count == 50
 
 
+async def current_weekly_leader_views() -> int:
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    async with AsyncSessionLocal() as db:
+        row = (
+            await db.execute(
+                select(func.count())
+                .select_from(PostView)
+                .where(PostView.viewed_at >= week_ago)
+                .group_by(PostView.post_id)
+                .order_by(func.count().desc())
+                .limit(1)
+            )
+        ).first()
+    return row[0] if row else 0
+
+
 async def test_analytics_endpoints_report_flushed_views(client, admin_token):
     headers = {"Authorization": f"Bearer {admin_token}"}
     post = await create_viewed_post()
-    await view_service.register_view(str(post.id), UA, "203.0.113.1", "https://google.com")
+
+    # Outrank whatever the live database already holds this week so the
+    # top-5 membership assertions below stay deterministic on a shared DB.
+    target = await current_weekly_leader_views() + 2
+    for _ in range(target):
+        await view_service.register_view(str(post.id), UA, "203.0.113.1", "https://google.com")
     await view_service.register_view(str(post.id), UA, "203.0.113.2", None)
     await flush_view_counts()
 
@@ -165,12 +187,14 @@ async def test_analytics_endpoints_report_flushed_views(client, admin_token):
     assert detail.status_code == 200, detail.text
     body = detail.json()
     assert body["post_id"] == str(post.id)
-    assert body["total_views"] == 2
-    assert body["views_last_30_days"] == 2
+    assert body["total_views"] == target + 1
+    assert body["views_last_30_days"] == target + 1
     assert body["unique_visitors_30_days"] == 2
     assert len(body["views_last_7_days"]) == 7
-    assert body["views_last_7_days"][-1]["views"] == 2
+    assert body["views_last_7_days"][-1]["views"] == target + 1
 
     overview = await client.get("/api/v1/analytics/overview", headers=headers)
     assert overview.status_code == 200, overview.text
-    assert any(top["post_id"] == str(post.id) for top in overview.json()["top_posts_7_days"])
+    top_posts = overview.json()["top_posts_7_days"]
+    assert any(top["post_id"] == str(post.id) for top in top_posts)
+    assert top_posts[0]["post_id"] == str(post.id)
