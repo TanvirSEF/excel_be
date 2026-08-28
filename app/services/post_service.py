@@ -470,9 +470,17 @@ def _render_html(content_json: dict) -> str:
             rendered.append(f"<blockquote>{text}</blockquote>")
         elif block_type == "code":
             rendered.append(f"<pre><code>{text}</code></pre>")
+        elif block_type == "hr":
+            rendered.append("<hr>")
         elif block_type == "list":
-            items = "".join(f"<li>{html.escape(i)}</li>" for i in block.get("items", []))
-            rendered.append(f"<ul>{items}</ul>")
+            parts = []
+            for item in block.get("items", []):
+                if isinstance(item, list):
+                    item = "".join(
+                        i.get("text", "") for i in item if isinstance(i, dict)
+                    )
+                parts.append(f"<li>{html.escape(item)}</li>")
+            rendered.append(f"<ul>{''.join(parts)}</ul>")
         else:
             rendered.append(f"<p>{text}</p>")
     return "\n".join(rendered)

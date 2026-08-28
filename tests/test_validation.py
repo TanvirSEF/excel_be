@@ -114,3 +114,110 @@ async def test_post_content_accepts_all_supported_blocks(client, admin_token):
     assert response.status_code == 201, response.text
     post_id = response.json()["id"]
     await client.delete(f"/api/v1/posts/{post_id}", headers={"Authorization": f"Bearer {admin_token}"})
+
+async def test_post_content_accepts_inline_marks_align_and_hr(client, admin_token):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Inline marks test",
+            "content_json": {
+                "blocks": [
+                    {
+                        "type": "paragraph",
+                        "text": "bold intro",
+                        "content": [
+                            {"text": "bold ", "marks": [{"type": "bold"}]},
+                            {
+                                "text": "link",
+                                "marks": [{"type": "link", "href": "https://example.com"}],
+                            },
+                        ],
+                        "align": "center",
+                    },
+                    {"type": "hr"},
+                    {
+                        "type": "list",
+                        "items": [
+                            [
+                                {"text": "rich item", "marks": [{"type": "italic"}]},
+                            ],
+                            "plain item",
+                        ],
+                        "ordered": False,
+                    },
+                    {
+                        "type": "table",
+                        "rows": [[[{"text": "cell", "marks": [{"type": "code"}]}], "b"]],
+                        "header": True,
+                    },
+                ]
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    post_id = response.json()["id"]
+    await client.delete(f"/api/v1/posts/{post_id}", headers={"Authorization": f"Bearer {admin_token}"})
+
+
+async def test_post_content_rejects_unsafe_link_href(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Unsafe link test",
+            "content_json": {
+                "blocks": [
+                    {
+                        "type": "paragraph",
+                        "text": "xss",
+                        "content": [
+                            {"text": "click", "marks": [{"type": "link", "href": "javascript:alert(1)"}]},
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
+
+
+async def test_post_content_rejects_unknown_mark_type(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Bad mark test",
+            "content_json": {
+                "blocks": [
+                    {
+                        "type": "paragraph",
+                        "text": "styled",
+                        "content": [{"text": "styled", "marks": [{"type": "underline"}]}],
+                    }
+                ]
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
+
+
+async def test_post_content_rejects_bad_align(client):
+    headers = await _writer_headers(client)
+    response = await client.post(
+        "/api/v1/posts",
+        headers=headers,
+        json={
+            "title": "Bad align test",
+            "content_json": {
+                "blocks": [{"type": "paragraph", "text": "off", "align": "justify"}]
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "content_json"
