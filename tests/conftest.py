@@ -1,9 +1,12 @@
+import os
 from collections.abc import AsyncIterator
 
 import httpx
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.engine import make_url
 
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal, engine
 from app.core.redis_client import close_redis, get_redis
 from app.core.security import hash_password
@@ -18,6 +21,20 @@ TEST_USERS = [
     ("Test Writer", "writer@test.com", "WriterPass123!", UserRole.technical_writer),
     ("Test SEO", "seo@test.com", "SeoPass12345!", UserRole.seo_specialist),
 ]
+
+
+def _is_safe_test_database() -> bool:
+    parsed = make_url(settings.database_url)
+    return parsed.host in {"localhost", "127.0.0.1", "::1"} or "test" in (parsed.database or "")
+
+
+if os.environ.get("ALLOW_REMOTE_DB_TESTS") != "1" and not _is_safe_test_database():
+    pytest.exit(
+        f"Refusing to run tests against remote database host {make_url(settings.database_url).host!r}. "
+        "Start the local stack (docker compose) and point DATABASE_URL at it, "
+        "or set ALLOW_REMOTE_DB_TESTS=1 to override.",
+        returncode=1,
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)

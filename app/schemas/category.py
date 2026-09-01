@@ -2,7 +2,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.common import RequestModel
+from app.schemas.common import Page, RequestModel
+from app.schemas.post import PostListItem
 from app.utils.slugify import SLUG_PATTERN
 
 
@@ -56,3 +57,8 @@ class CategoryOut(BaseModel):
 
 
 CategoryOut.model_rebuild()
+
+
+class CategoryWithPosts(BaseModel):
+    category: CategoryOut
+    posts: Page[PostListItem]

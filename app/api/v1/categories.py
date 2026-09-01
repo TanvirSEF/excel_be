@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.deps.auth_deps import require_role
 from app.deps.pagination import PaginationParams
 from app.models import Category, User, UserRole
-from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, ReorderItem
+from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, CategoryWithPosts, ReorderItem
 from app.services import category_service
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -20,12 +20,12 @@ async def get_tree(db: AsyncSession = Depends(get_db)) -> list[CategoryOut]:
     return await category_service.get_tree(db)
 
 
-@router.get("/{slug}")
+@router.get("/{slug}", response_model=CategoryWithPosts)
 async def get_by_slug(
     slug: str,
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> CategoryWithPosts:
     return await category_service.get_by_slug(db, slug, pagination)
 
 
