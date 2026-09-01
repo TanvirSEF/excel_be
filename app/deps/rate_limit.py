@@ -92,6 +92,10 @@ def newsletter_rate_limit() -> Callable[..., Awaitable[None]]:
     return rate_limit("newsletter", settings.rate_limit_newsletter)
 
 
+def contact_rate_limit() -> Callable[..., Awaitable[None]]:
+    return rate_limit("contact", settings.rate_limit_contact)
+
+
 def forgot_password_rate_limit() -> Callable[..., Awaitable[None]]:
     return rate_limit("forgot-password", settings.rate_limit_forgot_password)
 

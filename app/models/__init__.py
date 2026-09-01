@@ -2,6 +2,7 @@ from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.category import Category
 from app.models.comment import Comment, CommentStatus
+from app.models.contact_message import ContactMessage
 from app.models.downloadable_asset import DownloadableAsset
 from app.models.media import Media
 from app.models.newsletter import NewsletterStatus, NewsletterSubscriber

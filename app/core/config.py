@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     rate_limit_login: str = "5/15minutes"
     rate_limit_comment: str = "3/10minutes"
     rate_limit_newsletter: str = "5/1hour"
+    rate_limit_contact: str = "5/1hour"
     rate_limit_forgot_password: str = "5/15minutes"
     rate_limit_reset_password: str = "10/15minutes"
 
