@@ -16,10 +16,11 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.schema import Computed
 
 from app.models.base import Base
+from app.models.category import Category
 
 
 class PostStatus(str, enum.Enum):
@@ -67,6 +68,7 @@ class Post(Base):
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("categories.id")
     )
+    category: Mapped[Category | None] = relationship(lazy="selectin")
     status: Mapped[PostStatus] = mapped_column(Enum(PostStatus, name="post_status"))
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

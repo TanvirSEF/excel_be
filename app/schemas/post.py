@@ -91,6 +91,13 @@ def _validate_content(value: dict | None) -> dict | None:
     return value
 
 
+class CategoryMini(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    slug: str
+
+
 class PostListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -103,6 +110,7 @@ class PostListItem(BaseModel):
     is_trending: bool
     view_count: int
     published_at: datetime | None
+    category: CategoryMini | None = None
 
 
 class PostCreate(RequestModel):
