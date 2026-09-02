@@ -75,6 +75,7 @@ class Post(Base):
     reading_time_minutes: Mapped[int | None] = mapped_column(SmallInteger)
     meta_title: Mapped[str | None] = mapped_column(String(255))
     meta_description: Mapped[str | None] = mapped_column(String(500))
+    focus_keyphrase: Mapped[str | None] = mapped_column(String(100))
     canonical_url: Mapped[str | None] = mapped_column(Text)
     og_image_url: Mapped[str | None] = mapped_column(Text)
     schema_type: Mapped[str] = mapped_column(String(50), default="TechArticle", server_default=text("'TechArticle'"))

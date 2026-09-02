@@ -183,6 +183,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         reading_time_minutes=reading_time_minutes(data.content_json),
         meta_title=data.meta_title,
         meta_description=data.meta_description,
+        focus_keyphrase=data.focus_keyphrase,
         canonical_url=data.canonical_url,
         og_image_url=data.og_image_url,
         schema_type=data.schema_type or "TechArticle",

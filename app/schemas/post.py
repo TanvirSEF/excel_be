@@ -84,7 +84,7 @@ def _validate_rich(value: object) -> None:
 def _validate_block(block: dict) -> None:
     block_type = block.get("type")
 
-    if block_type in {"paragraph", "heading", "quote"}:
+    if block_type in {"paragraph", "heading", "quote", "callout", "accordion"}:
         if not isinstance(block.get("text"), str):
             raise ValueError("text blocks require a text string")
         align = block.get("align")
@@ -196,6 +196,7 @@ class PostCreate(RequestModel):
     tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
+    focus_keyphrase: str | None = Field(default=None, max_length=100)
     canonical_url: str | None = None
     og_image_url: str | None = None
     schema_type: str | None = Field(default=None, max_length=50)
@@ -213,6 +214,7 @@ class PostUpdate(RequestModel):
     tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
+    focus_keyphrase: str | None = Field(default=None, max_length=100)
     canonical_url: str | None = None
     og_image_url: str | None = None
     schema_type: str | None = Field(default=None, max_length=50)
@@ -242,6 +244,7 @@ class PostDetail(BaseModel):
     reading_time_minutes: int | None
     meta_title: str | None
     meta_description: str | None
+    focus_keyphrase: str | None
     canonical_url: str | None
     og_image_url: str | None
     schema_type: str
