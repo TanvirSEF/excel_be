@@ -10,13 +10,37 @@ from app.schemas.common import RequestModel
 from app.utils.slugify import SLUG_PATTERN
 
 ALLOWED_BLOCK_TYPES = frozenset(
-    {"paragraph", "heading", "quote", "code", "list", "html", "image", "table", "hr"}
+    {
+        "paragraph",
+        "heading",
+        "quote",
+        "code",
+        "list",
+        "html",
+        "image",
+        "table",
+        "hr",
+        "callout",
+        "button",
+        "embed",
+        "accordion",
+    }
 )
-ALLOWED_MARK_TYPES = frozenset({"bold", "italic", "strike", "code", "link"})
+ALLOWED_MARK_TYPES = frozenset(
+    {"bold", "italic", "strike", "code", "link", "textStyle", "highlight"}
+)
 ALLOWED_ALIGNS = frozenset({"left", "center", "right"})
+ALLOWED_CALLOUT_VARIANTS = frozenset({"info", "tip", "warning", "danger"})
+ALLOWED_BUTTON_VARIANTS = frozenset({"primary", "outline"})
 SAFE_HREF = re.compile(r"^(https?://|mailto:|/|#)", re.IGNORECASE)
+SAFE_COLOR = re.compile(r"^#[0-9a-fA-F]{3,8}$")
+SAFE_FONT_SIZE = re.compile(r"^\d{1,3}(\.\d+)?(px|pt|rem|em|%)$")
 MAX_BLOCKS = 2000
 MAX_CONTENT_JSON_BYTES = 512 * 1024
+
+
+def _validate_optional_color(value: object) -> bool:
+    return value is None or (isinstance(value, str) and SAFE_COLOR.match(value))
 
 
 def _validate_inlines(inlines: object) -> None:
@@ -33,10 +57,23 @@ def _validate_inlines(inlines: object) -> None:
         for mark in marks:
             if not isinstance(mark, dict) or mark.get("type") not in ALLOWED_MARK_TYPES:
                 raise ValueError("marks must be objects with a supported type")
-            if mark.get("type") == "link":
+            mark_type = mark.get("type")
+            if mark_type == "link":
                 href = mark.get("href")
                 if not isinstance(href, str) or not SAFE_HREF.match(href):
                     raise ValueError("link marks require a safe href")
+            if mark_type == "textStyle":
+                font_size = mark.get("fontSize")
+                if font_size is not None and (
+                    not isinstance(font_size, str) or not SAFE_FONT_SIZE.match(font_size)
+                ):
+                    raise ValueError("textStyle fontSize must be a valid CSS size")
+                color = mark.get("color")
+                if not _validate_optional_color(color):
+                    raise ValueError("textStyle color must be a hex color")
+            if mark_type == "highlight":
+                if not _validate_optional_color(mark.get("color")):
+                    raise ValueError("highlight color must be a hex color")
 
 
 def _validate_rich(value: object) -> None:
@@ -72,6 +109,42 @@ def _validate_block(block: dict) -> None:
                 raise ValueError("table rows must be lists")
             for cell in row:
                 _validate_rich(cell)
+
+    if block_type == "callout":
+        if block.get("variant") not in ALLOWED_CALLOUT_VARIANTS:
+            raise ValueError("callout variant must be info, tip, warning or danger")
+        title = block.get("title")
+        if title is not None and (not isinstance(title, str) or len(title) > 200):
+            raise ValueError("callout title must be a string of at most 200 chars")
+        if "content" in block:
+            _validate_rich(block.get("content"))
+
+    if block_type == "button":
+        label = block.get("label")
+        if not isinstance(label, str) or not 1 <= len(label) <= 100:
+            raise ValueError("button blocks require a label of 1-100 characters")
+        href = block.get("href")
+        if not isinstance(href, str) or not SAFE_HREF.match(href):
+            raise ValueError("button blocks require a safe href")
+        if block.get("variant") not in ALLOWED_BUTTON_VARIANTS:
+            raise ValueError("button variant must be primary or outline")
+
+    if block_type == "embed":
+        url = block.get("url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            raise ValueError("embed blocks require an https url")
+        caption = block.get("caption")
+        if caption is not None and (
+            not isinstance(caption, str) or len(caption) > 300
+        ):
+            raise ValueError("embed caption must be a string of at most 300 chars")
+
+    if block_type == "accordion":
+        title = block.get("title")
+        if not isinstance(title, str) or not 1 <= len(title) <= 300:
+            raise ValueError("accordion blocks require a title of 1-300 characters")
+        if "content" in block:
+            _validate_rich(block.get("content"))
 
 
 def _validate_content(value: dict | None) -> dict | None:
