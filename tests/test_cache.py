@@ -22,7 +22,7 @@ async def cache_test_cleanup():
 async def _cleanup():
     async with AsyncSessionLocal() as db:
         await db.execute(delete(Post).where(Post.slug.like("cache-test-%")))
-        await db.execute(delete(Category).where(Category.slug.like("cache-test-%")))
+        await db.execute(delete(Category).where(Category.slug.like("cache-category-%")))
         await db.commit()
 
 
