@@ -81,7 +81,12 @@
 		<guid isPermaLink="false">http://oldsite.local/?p=301</guid>
 		<description></description>
 		<content:encoded><![CDATA[<p>VLOOKUP is the most used lookup function in Excel. This guide covers it from zero to hero with real examples.</p>
-<p>For the basics read the <a href="https://support.microsoft.com/excel">official docs</a> first.</p>
+<p>For the basics read the <a href="https://support.microsoft.com/excel">official docs</a> first. Press <strong>[su_highlight]Ctrl[/su_highlight] + [su_highlight]F[/su_highlight]</strong> to search.</p>
+[wpsm_titlebox title="Key Takeaways" style="main"]<strong>Steps to look up a value:</strong>  ➤ Select a blank cell.  ➤ Type the formula below.  <img src="http://127.0.0.1:8765/img2.png" alt="Lookup result" />[/wpsm_titlebox]
+[wpsm_numhead num="1" style="3" heading="2"]Using the VLOOKUP Function[/wpsm_numhead]
+[wpsm_box type="solid_border" float="none" textalign="center"]<code>=VLOOKUP(A2, Data!B:C, 2, FALSE)</code>[/wpsm_box]
+[wpsm_box type="info" float="none" textalign="left"]Note: FALSE forces an exact match.[/wpsm_box]
+[sc:name="legend_box" title="Explanation" content="The <strong>VLOOKUP</strong> function searches the first column of a range and returns a value from another column."]
 <h2>Exact match vs approximate</h2>
 <ul>
 <li>FALSE means exact match</li>
@@ -89,6 +94,7 @@
 </ul>
 <blockquote>Master VLOOKUP and you master half of Excel.</blockquote>
 <figure><img src="http://127.0.0.1:8765/img2.png" alt="Growth chart" srcset="http://127.0.0.1:8765/img2-300x180.png 300w, http://127.0.0.1:8765/img2.png 800w" sizes="(max-width: 800px) 100vw, 800px" /><figcaption>Sample chart</figcaption></figure>
+<p>Print &[Pages] pages total, or filter by [type='submit'] and [local-name()='EUR'] fields.</p>
 <script>alert('this must be dropped')</script>
 <style>.wp-block-x{display:none}</style>
 <p>Practice with the sample workbook below.</p>]]></content:encoded>

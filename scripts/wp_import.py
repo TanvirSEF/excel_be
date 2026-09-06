@@ -1,13 +1,11 @@
 import argparse
 import asyncio
-import html as html_lib
 import logging
 import re
 import sys
 from hashlib import sha256
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
@@ -29,8 +27,10 @@ from app.models import (
 )
 from app.services import tag_service
 from app.services.media_service import process_image, upload_to_r2
+from app.utils.html_to_blocks import convert
 from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
+from app.utils.shortcodes import expand_shortcodes
 from app.utils.slugify import slugify
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -255,150 +255,6 @@ def _parse_post(item, status: str, wxr: WxrFile) -> WxrPost:
     )
 
 
-VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
-DROP_TAGS = {"script", "style"}
-
-
-class _TopLevelSplitter(HTMLParser):
-    def __init__(self, src: str):
-        super().__init__(convert_charrefs=False)
-        self.src = src
-        self.line_starts = [0]
-        for i, ch in enumerate(src):
-            if ch == "\n":
-                self.line_starts.append(i + 1)
-        self.depth = 0
-        self.drop_depth = 0
-        self.start: int | None = None
-        self.spans: list[tuple[int, int]] = []
-
-    def _offset(self) -> int:
-        line, col = self.getpos()
-        return self.line_starts[line - 1] + col
-
-    def _tag_end(self, start: int) -> int:
-        return self.src.index(">", start) + 1
-
-    def handle_starttag(self, tag, attrs):
-        if self.depth == 0 and tag in DROP_TAGS:
-            self.drop_depth += 1
-            return
-        if self.drop_depth:
-            return
-        if tag in VOID_TAGS:
-            if self.depth == 0:
-                start = self._offset()
-                self.spans.append((start, self._tag_end(start)))
-            return
-        if self.depth == 0:
-            self.start = self._offset()
-        self.depth += 1
-
-    def handle_startendtag(self, tag, attrs):
-        if self.depth == 0 and not self.drop_depth:
-            start = self._offset()
-            self.spans.append((start, self._tag_end(start)))
-
-    def handle_endtag(self, tag):
-        if tag in DROP_TAGS and self.drop_depth:
-            self.drop_depth -= 1
-            return
-        if self.drop_depth or tag in VOID_TAGS:
-            return
-        if self.depth > 0:
-            self.depth -= 1
-            if self.depth == 0 and self.start is not None:
-                end = self._offset() + len(f"</{tag}>")
-                self.spans.append((self.start, end))
-                self.start = None
-
-    def handle_data(self, data):
-        if self.depth == 0 and not self.drop_depth and data.strip():
-            start = self._offset()
-            self.spans.append((start, start + len(data)))
-
-    def close(self):
-        super().close()
-        if self.start is not None and self.depth > 0:
-            self.spans.append((self.start, len(self.src)))
-            self.start = None
-
-
-OPEN_TAG_RE = re.compile(r"<([a-zA-Z0-9]+)")
-MARKUP_RE = re.compile(r"<[a-zA-Z!/]")
-LI_RE = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
-
-
-class _TextCollector(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-
-    def handle_data(self, data):
-        self.parts.append(data)
-
-
-def _strip_tags(fragment: str) -> str:
-    collector = _TextCollector()
-    collector.feed(fragment)
-    return html_lib.unescape("".join(collector.parts)).strip()
-
-
-def _inner(raw: str) -> str:
-    first = raw.find(">")
-    last = raw.rfind("<")
-    if first == -1 or last <= first:
-        return ""
-    return raw[first + 1 : last]
-
-
-def html_to_blocks(content: str) -> list[dict]:
-    splitter = _TopLevelSplitter(content)
-    splitter.feed(content)
-    splitter.close()
-
-    blocks = []
-    for start, end in sorted(splitter.spans):
-        raw = content[start:end].strip()
-        if not raw:
-            continue
-        blocks.append(_to_block(raw))
-    return blocks
-
-
-def _to_block(raw: str) -> dict:
-    match = OPEN_TAG_RE.match(raw)
-    tag = match.group(1).lower() if match else ""
-    inner = _inner(raw)
-
-    if tag == "p" and not MARKUP_RE.search(inner):
-        text = html_lib.unescape(inner).strip()
-        if text:
-            return {"type": "paragraph", "text": text}
-        return {"type": "html", "html": raw}
-
-    if tag in ("h1", "h2", "h3", "h4", "h5", "h6") and not MARKUP_RE.search(inner):
-        return {"type": "heading", "text": html_lib.unescape(inner).strip(), "level": int(tag[1])}
-
-    if tag == "blockquote" and not MARKUP_RE.search(inner):
-        return {"type": "quote", "text": html_lib.unescape(inner).strip()}
-
-    if tag == "pre" and not MARKUP_RE.search(inner):
-        return {"type": "code", "text": html_lib.unescape(inner).rstrip()}
-
-    if tag in ("ul", "ol"):
-        items = [html_lib.unescape(m).strip() for m in LI_RE.findall(raw)]
-        if items and not any(MARKUP_RE.search(i) for i in items):
-            return {"type": "list", "items": items, "ordered": tag == "ol"}
-
-    if not tag and not MARKUP_RE.search(raw):
-        text = raw.strip()
-        if text:
-            return {"type": "paragraph", "text": text}
-
-    return {"type": "html", "html": raw}
-
-
 class MediaPipeline:
     def __init__(self, db, author: User, enabled: bool):
         self.db = db
@@ -485,7 +341,7 @@ async def import_posts(db, wxr: WxrFile, media: MediaPipeline, limit: int | None
                 new_url = await media.remap(img_url)
                 if new_url != img_url:
                     content_html = content_html.replace(img_url, new_url)
-        content_html = sanitize_html(content_html)
+        content_html = sanitize_html(expand_shortcodes(content_html))
 
         featured_url = None
         if wp_post.thumbnail_id:
@@ -493,7 +349,7 @@ async def import_posts(db, wxr: WxrFile, media: MediaPipeline, limit: int | None
             if attachment and attachment.url:
                 featured_url = await media.remap(attachment.url, attachment.alt)
 
-        content_json = {"blocks": html_to_blocks(content_html)}
+        content_json = convert(content_html)
         seo: dict[str, str] = {}
         for key, value in wp_post.metas.items():
             if key in SEO_META_KEYS and value.strip():

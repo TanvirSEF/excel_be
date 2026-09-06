@@ -1,9 +1,7 @@
 ﻿import hashlib
-import html as html_lib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
@@ -23,8 +21,10 @@ from app.models import (
 )
 from app.services import tag_service
 from app.services.media_service import process_image, upload_to_r2
+from app.utils.html_to_blocks import convert
 from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
+from app.utils.shortcodes import expand_shortcodes
 from app.utils.slugify import slugify
 
 CONTENT_NS = "{http://purl.org/rss/1.0/modules/content/}"
@@ -222,59 +222,6 @@ def parse_wxr_bytes(content: bytes) -> WxrFile:
     return wxr
 
 
-def _html_to_blocks(content: str) -> list[dict]:
-    if not content.strip():
-        return []
-
-    class _Parser(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self._blocks: list[dict] = []
-            self._tag: str | None = None
-            self._buf = ""
-            self._list_items: list[str] = []
-            self._list_ordered = False
-
-        def handle_starttag(self, tag, attrs):
-            self._tag = tag
-            if tag in ("ul", "ol"):
-                self._list_ordered = tag == "ol"
-                self._list_items = []
-
-        def handle_startendtag(self, tag, attrs):
-            if tag == "img":
-                d = dict(attrs)
-                if src := d.get("src"):
-                    self._blocks.append({"type": "image", "url": src, "alt": d.get("alt", "")})
-
-        def handle_endtag(self, tag):
-            text = self._buf.strip()
-            self._buf = ""
-            if tag in ("h1", "h2", "h3", "h4", "h5", "h6") and text:
-                self._blocks.append({"type": "heading", "text": text, "level": int(tag[1])})
-            elif tag == "p" and text:
-                self._blocks.append({"type": "paragraph", "text": text})
-            elif tag == "blockquote" and text:
-                self._blocks.append({"type": "quote", "text": text})
-            elif tag == "pre" and text:
-                self._blocks.append({"type": "code", "text": text})
-            elif tag == "li" and text:
-                self._list_items.append(text)
-            elif tag in ("ul", "ol") and self._list_items:
-                self._blocks.append({"type": "list", "items": self._list_items, "ordered": self._list_ordered})
-                self._list_items = []
-
-        def handle_data(self, data):
-            self._buf += data
-
-    try:
-        parser = _Parser()
-        parser.feed(content)
-        return parser._blocks or [{"type": "html", "html": content}]
-    except Exception:
-        return [{"type": "html", "html": content}]
-
-
 class MediaPipeline:
     def __init__(self, db: AsyncSession, author: User, enabled: bool):
         self.db = db
@@ -376,7 +323,7 @@ async def _import_posts(db: AsyncSession, wxr: WxrFile, media: MediaPipeline) ->
                 new_url = await media.remap(img_url)
                 if new_url != img_url:
                     content_html = content_html.replace(img_url, new_url)
-        content_html = sanitize_html(content_html)
+        content_html = sanitize_html(expand_shortcodes(content_html))
 
         featured_url: str | None = None
         if wp_post.thumbnail_id:
@@ -384,7 +331,7 @@ async def _import_posts(db: AsyncSession, wxr: WxrFile, media: MediaPipeline) ->
             if attachment and attachment.url:
                 featured_url = await media.remap(attachment.url, attachment.alt)
 
-        content_json = {"blocks": _html_to_blocks(content_html)}
+        content_json = convert(content_html)
         seo: dict[str, str] = {}
         for key, value in wp_post.metas.items():
             if key in SEO_META_KEYS and value.strip():
