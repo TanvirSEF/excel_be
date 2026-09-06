@@ -49,6 +49,15 @@ def test_sanitize_keeps_rich_content():
     assert 'colspan="2"' in clean
 
 
+def test_sanitize_keeps_callout_attributes_and_mark():
+    html = '<div data-callout="" data-variant="info" data-title="Key Takeaways">Use <mark>Ctrl</mark></div>'
+    clean = sanitize_html(html)
+    assert 'data-callout=""' in clean
+    assert 'data-variant="info"' in clean
+    assert 'data-title="Key Takeaways"' in clean
+    assert "<mark>Ctrl</mark>" in clean
+
+
 async def test_stored_content_html_is_sanitized(client, admin_token):
     marker = uuid4().hex[:8]
     response = await client.post(

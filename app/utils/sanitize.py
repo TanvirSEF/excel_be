@@ -21,7 +21,7 @@ ATTRIBUTES = {
     "pre": {"class"},
     "code": {"class"},
     "span": {"class"},
-    "div": {"class"},
+    "div": {"class", "data-callout", "data-variant", "data-title"},
     "figure": {"class"},
     "table": {"class"},
 }
