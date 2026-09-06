@@ -48,6 +48,54 @@ async def current_tags(post_id: UUID) -> list[str]:
         return await tag_service.post_tag_names(db, post_id)
 
 
+async def test_create_renders_marks_into_content_html(client, admin_token):
+    created = await create_post(
+        client,
+        admin_token,
+        content_json={
+            "blocks": [
+                {
+                    "type": "paragraph",
+                    "text": "Press bold now",
+                    "content": [
+                        {"text": "Press "},
+                        {"text": "bold", "marks": [{"type": "bold"}]},
+                        {"text": " "},
+                        {"text": "key", "marks": [{"type": "highlight"}]},
+                        {"text": " docs", "marks": [{"type": "link", "href": "https://example.com"}]},
+                    ],
+                },
+                {
+                    "type": "callout",
+                    "variant": "info",
+                    "title": "Key Takeaways",
+                    "text": "Use VLOOKUP",
+                    "content": [
+                        {"text": "Use "},
+                        {"text": "VLOOKUP", "marks": [{"type": "code"}]},
+                    ],
+                },
+                {
+                    "type": "list",
+                    "items": [[{"text": "first", "marks": [{"type": "bold"}]}], "second"],
+                    "ordered": True,
+                },
+            ]
+        },
+    )
+
+    async with AsyncSessionLocal() as db:
+        post = await db.scalar(select(Post).where(Post.slug == created["slug"]))
+    assert post is not None
+    assert "<strong>bold</strong>" in post.content_html
+    assert "<mark>key</mark>" in post.content_html
+    assert '<a href="https://example.com"' in post.content_html
+    assert "<code>VLOOKUP</code>" in post.content_html
+    assert "<ol>" in post.content_html
+    assert 'data-callout=""' in post.content_html
+    assert 'data-title="Key Takeaways"' in post.content_html
+
+
 async def login(client: httpx.AsyncClient, email: str, password: str) -> dict:
     response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text

@@ -455,6 +455,41 @@ def _can_edit(user: User, post: Post) -> bool:
     return post.author_id == user.id and post.status in WRITER_EDITABLE
 
 
+def _render_runs(runs) -> str:
+    parts = []
+    for run in runs:
+        if isinstance(run, str):
+            parts.append(html.escape(run))
+            continue
+        if not isinstance(run, dict):
+            continue
+        text = html.escape(run.get("text", ""))
+        for mark in run.get("marks") or []:
+            mark_type = mark.get("type")
+            if mark_type == "bold":
+                text = f"<strong>{text}</strong>"
+            elif mark_type == "italic":
+                text = f"<em>{text}</em>"
+            elif mark_type == "strike":
+                text = f"<del>{text}</del>"
+            elif mark_type == "code":
+                text = f"<code>{text}</code>"
+            elif mark_type == "highlight":
+                text = f"<mark>{text}</mark>"
+            elif mark_type == "link":
+                href = html.escape(mark.get("href", ""), quote=True)
+                text = f'<a href="{href}">{text}</a>'
+        parts.append(text)
+    return "".join(parts)
+
+
+def _block_runs(block) -> list:
+    content = block.get("content")
+    if isinstance(content, list) and content:
+        return content
+    return [{"text": block.get("text", "")}]
+
+
 def _render_html(content_json: dict) -> str:
     rendered = []
     for block in content_json.get("blocks", []):
@@ -463,25 +498,38 @@ def _render_html(content_json: dict) -> str:
         if block.get("html"):
             rendered.append(sanitize_html(block["html"]))
             continue
-        text = html.escape(block.get("text", ""))
         block_type = block.get("type", "paragraph")
+        runs_html = _render_runs(_block_runs(block))
         if block_type == "heading":
-            rendered.append(f"<h2>{text}</h2>")
+            level = min(max(block.get("level", 2), 1), 6)
+            rendered.append(f"<h{level}>{runs_html}</h{level}>")
         elif block_type == "quote":
-            rendered.append(f"<blockquote>{text}</blockquote>")
+            rendered.append(f"<blockquote>{runs_html}</blockquote>")
         elif block_type == "code":
+            text = html.escape(block.get("text", ""))
             rendered.append(f"<pre><code>{text}</code></pre>")
         elif block_type == "hr":
             rendered.append("<hr>")
         elif block_type == "list":
-            parts = []
+            items = []
             for item in block.get("items", []):
                 if isinstance(item, list):
-                    item = "".join(
-                        i.get("text", "") for i in item if isinstance(i, dict)
-                    )
-                parts.append(f"<li>{html.escape(item)}</li>")
-            rendered.append(f"<ul>{''.join(parts)}</ul>")
+                    items.append(f"<li>{_render_runs(item)}</li>")
+                elif isinstance(item, str):
+                    items.append(f"<li>{html.escape(item)}</li>")
+            tag = "ol" if block.get("ordered") else "ul"
+            rendered.append(f"<{tag}>{''.join(items)}</{tag}>")
+        elif block_type == "image":
+            url = html.escape(block.get("url", ""), quote=True)
+            alt = html.escape(block.get("alt", ""), quote=True)
+            rendered.append(f'<img src="{url}" alt="{alt}">')
+        elif block_type == "callout":
+            variant = block.get("variant", "info")
+            attrs = f'data-callout="" data-variant="{variant}"'
+            title = html.escape(block.get("title") or "", quote=True)
+            if title:
+                attrs += f' data-title="{title}"'
+            rendered.append(f"<div {attrs}><p>{runs_html}</p></div>")
         else:
-            rendered.append(f"<p>{text}</p>")
-    return "\n".join(rendered)
+            rendered.append(f"<p>{runs_html}</p>")
+    return sanitize_html("\n".join(rendered))
