@@ -20,6 +20,7 @@ _NUMHEAD_RE = re.compile(r"\[wpsm_numhead(" + _ATTRS + r")\](.*?)\[/wpsm_numhead
 _HIGHLIGHT_RE = re.compile(r"\[su_highlight" + _ATTRS + r"\](.*?)\[/su_highlight\]", re.DOTALL)
 _SC_ENCLOSED_RE = re.compile(r"\[sc[:\s](" + _ATTRS + r")\](.*?)\[/sc\]", re.DOTALL)
 _SC_SELF_RE = re.compile(r"\[sc[:\s]" + _ATTRS + r"\]", re.DOTALL)
+_BUTTON_RE = re.compile(r"\[wpsm_button(" + _ATTRS + r")\](.*?)\[/wpsm_button\]", re.DOTALL)
 
 _BOX_VARIANTS = {"warning": "warning", "danger": "danger"}
 
@@ -70,10 +71,17 @@ def expand_shortcodes(content: str) -> str:
             return match.group(0)
         return _callout(html.unescape(attrs["content"]), title=attrs.get("title", ""))
 
+    def button(match: re.Match) -> str:
+        attrs = _get_attrs(match.group(1))
+        link = attrs.get("link") or attrs.get("url") or attrs.get("href") or "#"
+        label = match.group(2).strip() or "Download"
+        return f'<div class="py-2"><a href="{html.escape(link)}" data-button="" data-variant="primary">{label}</a></div>'
+
     expanded = _SC_ENCLOSED_RE.sub(sc_enclosed, content)
     expanded = _SC_SELF_RE.sub(sc_self, expanded)
     expanded = _TITLEBOX_RE.sub(titlebox, expanded)
     expanded = _BOX_RE.sub(box, expanded)
+    expanded = _BUTTON_RE.sub(button, expanded)
     expanded = _NUMHEAD_RE.sub(numhead, expanded)
     expanded = _HIGHLIGHT_RE.sub(lambda m: f"<kbd>{m.group(1)}</kbd>", expanded)
     return expanded

@@ -13,7 +13,7 @@ TAGS = {
 }
 
 ATTRIBUTES = {
-    "a": {"href", "title"},
+    "a": {"href", "title", "data-button", "data-variant"},
     "img": {"src", "alt", "width", "height", "loading"},
     "iframe": {"src", "width", "height", "title", "allow", "allowfullscreen", "frameborder"},
     "th": {"colspan", "rowspan"},

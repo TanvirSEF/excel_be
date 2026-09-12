@@ -4,6 +4,7 @@ Shared by the WP importers and the content rebuild script. Produces blocks
 with inline runs and marks so formatting (bold, links, highlights) survives
 the conversion, and maps div[data-callout] wrappers to callout blocks.
 """
+import re
 from bs4 import BeautifulSoup, NavigableString, Tag
 
 from app.utils.sanitize import sanitize_html
@@ -185,13 +186,20 @@ def convert(html):
                 runs = collect_runs(child, [])
                 text = runs_text(runs)
                 if text:
+                    num = (child.get("data-numhead") or "").strip()
+                    if not num:
+                        m = re.match(r"^(\d{1,3})[\.\)]\s*(.*)$", text)
+                        if m:
+                            num = m.group(1)
+                            text = m.group(2)
+                            if runs and runs[0].get("text"):
+                                runs[0]["text"] = re.sub(r"^\d{1,3}[\.\)]\s*", "", runs[0]["text"])
                     block = {
                         "type": "heading",
                         "text": text,
                         "level": HEADING_LEVELS[name],
                         "content": runs,
                     }
-                    num = (child.get("data-numhead") or "").strip()
                     if num:
                         block["num"] = num[:10]
                     blocks.append(block)
@@ -266,7 +274,17 @@ def convert(html):
                 blocks.append({"type": "hr"})
 
             elif name == "div":
-                if child.get("data-callout") is not None:
+                btn = child.find("a", attrs={"data-button": True}) if not has_block_child(child) else None
+                if btn is not None:
+                    href = (btn.get("href") or "#").strip()
+                    label = btn.get_text().strip() or "Download"
+                    blocks.append({
+                        "type": "button",
+                        "label": label,
+                        "href": href,
+                        "variant": btn.get("data-variant") or "primary",
+                    })
+                elif child.get("data-callout") is not None:
                     runs, images = _callout_parts(child)
                     text = runs_text(runs)
                     if not text:
@@ -296,6 +314,16 @@ def convert(html):
                         if block:
                             blocks.append(block)
                     emit_paragraph(collect_runs(child, []))
+
+            elif name == "a" and child.get("data-button") is not None:
+                href = (child.get("href") or "#").strip()
+                label = child.get_text().strip() or "Download"
+                blocks.append({
+                    "type": "button",
+                    "label": label,
+                    "href": href,
+                    "variant": child.get("data-variant") or "primary",
+                })
 
             elif name in MARK_TAGS or name == "a":
                 emit_paragraph(collect_runs(child, []))
