@@ -56,6 +56,14 @@ def test_sc_enclosed_form():
     )
 
 
+def test_sc_single_quoted_attributes():
+    src = "[sc name=\"legend_box\" title='Explanation' content='In the formula, <strong>B2:B11</strong> is valid.']"
+    assert expand_shortcodes(src) == (
+        '<div data-callout="" data-variant="info" data-title="Explanation">'
+        "In the formula, <strong>B2:B11</strong> is valid.</div>"
+    )
+
+
 def test_excel_formula_brackets_untouched():
     src = "Insert &[Pages] then [type='submit'] and [local-name()='EUR'] plus [gallery]"
     assert expand_shortcodes(src) == src
