@@ -37,14 +37,15 @@ def _numhead(attrs: dict[str, str], inner: str) -> str:
     except ValueError:
         level = 2
     num = attrs.get("num", "").strip()
-    text = f"{num}. {inner}" if num else inner
-    return f"<h{level}>{text}</h{level}>"
+    if num:
+        return f'<h{level} data-numhead="{html.escape(num)}">{inner}</h{level}>'
+    return f"<h{level}>{inner}</h{level}>"
 
 
 def expand_shortcodes(content: str) -> str:
     def titlebox(match: re.Match) -> str:
         attrs = dict(_ATTR.findall(match.group(1)))
-        return _callout(match.group(2), title=attrs.get("title", ""))
+        return _callout(match.group(2), title=attrs.get("title", ""), variant="tip")
 
     def box(match: re.Match) -> str:
         attrs = dict(_ATTR.findall(match.group(1)))
@@ -70,5 +71,5 @@ def expand_shortcodes(content: str) -> str:
     expanded = _TITLEBOX_RE.sub(titlebox, expanded)
     expanded = _BOX_RE.sub(box, expanded)
     expanded = _NUMHEAD_RE.sub(numhead, expanded)
-    expanded = _HIGHLIGHT_RE.sub(lambda m: f"<mark>{m.group(1)}</mark>", expanded)
+    expanded = _HIGHLIGHT_RE.sub(lambda m: f"<kbd>{m.group(1)}</kbd>", expanded)
     return expanded

@@ -24,6 +24,12 @@ ATTRIBUTES = {
     "div": {"class", "data-callout", "data-variant", "data-title"},
     "figure": {"class"},
     "table": {"class"},
+    "h1": {"data-numhead"},
+    "h2": {"data-numhead"},
+    "h3": {"data-numhead"},
+    "h4": {"data-numhead"},
+    "h5": {"data-numhead"},
+    "h6": {"data-numhead"},
 }
 
 URL_SCHEMES = {"http", "https", "mailto"}

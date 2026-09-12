@@ -1,26 +1,26 @@
 from app.utils.shortcodes import expand_shortcodes
 
 
-def test_su_highlight_becomes_mark():
-    assert expand_shortcodes("[su_highlight]Ctrl[/su_highlight]") == "<mark>Ctrl</mark>"
+def test_su_highlight_becomes_kbd():
+    assert expand_shortcodes("[su_highlight]Ctrl[/su_highlight]") == "<kbd>Ctrl</kbd>"
 
 
 def test_su_highlight_with_attributes():
     src = '[su_highlight background="#DDFF99" color="#000000"]Shift[/su_highlight]'
-    assert expand_shortcodes(src) == "<mark>Shift</mark>"
+    assert expand_shortcodes(src) == "<kbd>Shift</kbd>"
 
 
-def test_titlebox_becomes_callout():
+def test_titlebox_becomes_tip_callout():
     src = '[wpsm_titlebox title="Key Takeaways" style="main"]<strong>Steps</strong>[/wpsm_titlebox]'
     assert expand_shortcodes(src) == (
-        '<div data-callout="" data-variant="info" data-title="Key Takeaways">'
+        '<div data-callout="" data-variant="tip" data-title="Key Takeaways">'
         "<strong>Steps</strong></div>"
     )
 
 
 def test_titlebox_without_title_omits_attribute():
-    src = "[wpsm_titlebox style=\"main\"]content[/wpsm_titlebox]"
-    assert expand_shortcodes(src) == '<div data-callout="" data-variant="info">content</div>'
+    src = '[wpsm_titlebox style="main"]content[/wpsm_titlebox]'
+    assert expand_shortcodes(src) == '<div data-callout="" data-variant="tip">content</div>'
 
 
 def test_box_maps_variants():
@@ -30,9 +30,9 @@ def test_box_maps_variants():
     assert expand_shortcodes(warning) == '<div data-callout="" data-variant="warning">Careful</div>'
 
 
-def test_numhead_becomes_numbered_heading():
+def test_numhead_becomes_data_numhead_heading():
     src = '[wpsm_numhead num="2" style="3" heading="2"]Using Excel&#8217;s Built-In Method[/wpsm_numhead]'
-    assert expand_shortcodes(src) == "<h2>2. Using Excel&#8217;s Built-In Method</h2>"
+    assert expand_shortcodes(src) == '<h2 data-numhead="2">Using Excel&#8217;s Built-In Method</h2>'
 
 
 def test_numhead_without_num_keeps_plain_heading():

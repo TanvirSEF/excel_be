@@ -17,7 +17,7 @@ MARK_TAGS = {
     "s": "strike",
     "strike": "strike",
     "code": "code",
-    "kbd": "code",
+    "kbd": "kbd",
     "mark": "highlight",
 }
 HEADING_LEVELS = {"h1": 2, "h2": 2, "h3": 3, "h4": 4, "h5": 4, "h6": 4}
@@ -185,12 +185,16 @@ def convert(html):
                 runs = collect_runs(child, [])
                 text = runs_text(runs)
                 if text:
-                    blocks.append({
+                    block = {
                         "type": "heading",
                         "text": text,
                         "level": HEADING_LEVELS[name],
                         "content": runs,
-                    })
+                    }
+                    num = (child.get("data-numhead") or "").strip()
+                    if num:
+                        block["num"] = num[:10]
+                    blocks.append(block)
 
             elif name == "p":
                 non_inline = [

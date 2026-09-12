@@ -12,6 +12,12 @@ def test_bold_paragraph_produces_runs():
     assert {"text": "again", "marks": [{"type": "bold"}]} in runs
 
 
+def test_kbd_tag_becomes_kbd_run():
+    doc = convert("<p>Press <kbd>Ctrl</kbd> now</p>")
+    runs = doc["blocks"][0]["content"]
+    assert {"text": "Ctrl", "marks": [{"type": "kbd"}]} in runs
+
+
 def test_mark_tag_becomes_highlight_run():
     doc = convert("<p>Press <mark>Ctrl</mark> now</p>")
     runs = doc["blocks"][0]["content"]
@@ -32,6 +38,13 @@ def test_callout_block_shape():
     assert {"text": "Steps:", "marks": [{"type": "bold"}]} in callout["content"]
     assert {"text": "=A1", "marks": [{"type": "code"}]} in callout["content"]
     assert {"text": "\n"} in callout["content"]
+
+
+def test_titlebox_produces_tip_callout():
+    html = '<div data-callout="" data-variant="tip" data-title="Key Takeaways"><p>Steps</p></div>'
+    callout = blocks_of_type(convert(html), "callout")[0]
+    assert callout["variant"] == "tip"
+    assert callout["title"] == "Key Takeaways"
 
 
 def test_callout_paragraphs_join_with_newlines():
@@ -56,10 +69,19 @@ def test_callout_invalid_variant_falls_back_to_info():
     assert blocks_of_type(convert(html), "callout")[0]["variant"] == "info"
 
 
-def test_numbered_heading():
-    heading = blocks_of_type(convert("<h2>1. Using Built-In Method</h2>"), "heading")[0]
+def test_numbered_heading_with_data_numhead():
+    heading = blocks_of_type(
+        convert('<h2 data-numhead="1">Using Built-In Method</h2>'), "heading"
+    )[0]
     assert heading["level"] == 2
-    assert heading["text"] == "1. Using Built-In Method"
+    assert heading["text"] == "Using Built-In Method"
+    assert heading["num"] == "1"
+
+
+def test_plain_heading_has_no_num():
+    heading = blocks_of_type(convert("<h2>Plain Heading</h2>"), "heading")[0]
+    assert heading["text"] == "Plain Heading"
+    assert "num" not in heading
 
 
 def test_is_broken_detects_empty_and_missing_docs():

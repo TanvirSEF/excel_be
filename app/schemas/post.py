@@ -27,7 +27,7 @@ ALLOWED_BLOCK_TYPES = frozenset(
     }
 )
 ALLOWED_MARK_TYPES = frozenset(
-    {"bold", "italic", "strike", "code", "link", "textStyle", "highlight"}
+    {"bold", "italic", "strike", "code", "kbd", "link", "textStyle", "highlight"}
 )
 ALLOWED_ALIGNS = frozenset({"left", "center", "right"})
 ALLOWED_CALLOUT_VARIANTS = frozenset({"info", "tip", "warning", "danger"})
@@ -92,6 +92,11 @@ def _validate_block(block: dict) -> None:
             raise ValueError("align must be left, center or right")
         if "content" in block:
             _validate_inlines(block.get("content"))
+
+    if block_type == "heading":
+        num = block.get("num")
+        if num is not None and (not isinstance(num, str) or not 1 <= len(num) <= 10):
+            raise ValueError("heading num must be a string of 1-10 characters")
 
     if block_type == "list":
         items = block.get("items")
