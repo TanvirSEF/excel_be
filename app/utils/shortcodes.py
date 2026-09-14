@@ -21,6 +21,7 @@ _HIGHLIGHT_RE = re.compile(r"\[su_highlight" + _ATTRS + r"\](.*?)\[/su_highlight
 _SC_ENCLOSED_RE = re.compile(r"\[sc[:\s](" + _ATTRS + r")\](.*?)\[/sc\]", re.DOTALL)
 _SC_SELF_RE = re.compile(r"\[sc[:\s]" + _ATTRS + r"\]", re.DOTALL)
 _BUTTON_RE = re.compile(r"\[wpsm_button(" + _ATTRS + r")\](.*?)\[/wpsm_button\]", re.DOTALL)
+_COLORTABLE_RE = re.compile(r"\[wpsm_colortable(" + _ATTRS + r")\](.*?)\[/wpsm_colortable\]", re.DOTALL)
 
 _BOX_VARIANTS = {"warning": "warning", "danger": "danger"}
 
@@ -82,6 +83,8 @@ def expand_shortcodes(content: str) -> str:
     expanded = _TITLEBOX_RE.sub(titlebox, expanded)
     expanded = _BOX_RE.sub(box, expanded)
     expanded = _BUTTON_RE.sub(button, expanded)
+    # colortable is purely a table skin — keep the wrapped table itself
+    expanded = _COLORTABLE_RE.sub(lambda m: m.group(2), expanded)
     expanded = _NUMHEAD_RE.sub(numhead, expanded)
     expanded = _HIGHLIGHT_RE.sub(lambda m: f"<kbd>{m.group(1)}</kbd>", expanded)
     return expanded
