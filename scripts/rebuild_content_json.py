@@ -52,6 +52,11 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--slug")
     parser.add_argument("--all", action="store_true")
+    parser.add_argument(
+        "--all-posts",
+        action="store_true",
+        help="rebuild every post unconditionally (e.g. after converter changes)",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -68,16 +73,20 @@ async def main():
             return
 
         posts = (await db.scalars(select(Post).order_by(Post.id))).all()
-        candidates = [p for p in posts if needs_rebuild(p)]
-        print(f"total posts: {len(posts)} | needing rebuild: {len(candidates)}")
+        if args.all_posts:
+            candidates = [p for p in posts if p.content_html]
+            print(f"total posts: {len(posts)} | rebuilding all with content_html: {len(candidates)}")
+        else:
+            candidates = [p for p in posts if needs_rebuild(p)]
+            print(f"total posts: {len(posts)} | needing rebuild: {len(candidates)}")
 
         if args.dry_run:
             for p in candidates[:10]:
                 print(" -", p.slug)
             return
 
-        if not args.all:
-            print("use --all to rebuild, or --slug for a single post")
+        if not (args.all or args.all_posts):
+            print("use --all/--all-posts to rebuild, or --slug for a single post")
             return
 
         fixed = 0

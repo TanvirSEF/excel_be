@@ -71,11 +71,26 @@ def has_block_child(el):
     )
 
 
+def _img_dimension(img, attr):
+    try:
+        value = int((img.get(attr) or "").strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def image_block(img, fallback_alt=""):
     src = (img.get("src") or "").strip()
     if not src:
         return None
-    return {"type": "image", "url": src, "alt": img.get("alt") or fallback_alt}
+    block = {"type": "image", "url": src, "alt": img.get("alt") or fallback_alt}
+    width = _img_dimension(img, "width")
+    if width is not None:
+        block["width"] = width
+    height = _img_dimension(img, "height")
+    if height is not None:
+        block["height"] = height
+    return block
 
 
 def table_block(table):
