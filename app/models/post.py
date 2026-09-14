@@ -21,7 +21,6 @@ from sqlalchemy.schema import Computed
 
 from app.models.base import Base
 from app.models.category import Category
-from app.models.series import Series
 
 
 class PostStatus(str, enum.Enum):
@@ -75,7 +74,6 @@ class Post(Base):
         UUID(as_uuid=True), ForeignKey("series.id")
     )
     series_order: Mapped[int | None] = mapped_column(Integer)
-    series: Mapped[Series | None] = relationship(lazy="selectin")
     status: Mapped[PostStatus] = mapped_column(Enum(PostStatus, name="post_status"))
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

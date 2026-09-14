@@ -14,7 +14,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.deps.pagination import PaginationParams
-from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
+from app.models import Category, Post, PostStatus, PostTag, Series, Tag, User, UserRole
 from app.schemas.post import (
     PostAdminItem,
     PostCreate,
@@ -437,7 +437,7 @@ async def _series_context(db: AsyncSession, post: Post) -> SeriesContext | None:
     if post.series_id is None:
         return None
 
-    series = post.series
+    series = await db.get(Series, post.series_id)
     if series is None:
         return None
 
