@@ -11,6 +11,7 @@ from app.models.post import Post, PostStatus
 from app.models.post_view import PostView
 from app.models.redirect import Redirect
 from app.models.refresh_token import RefreshToken
+from app.models.series import Series
 from app.models.tag import PostTag, Tag
 from app.models.user import User, UserRole
 
@@ -31,6 +32,7 @@ __all__ = [
     "PostView",
     "Redirect",
     "RefreshToken",
+    "Series",
     "Tag",
     "User",
     "UserRole",

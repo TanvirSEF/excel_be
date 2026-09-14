@@ -23,6 +23,10 @@ def trending_list_key(page: int, page_size: int) -> str:
     return f"posts:trending:{page}:{page_size}"
 
 
+def series_list_key(category_slug: str | None) -> str:
+    return f"series:list:{category_slug or 'all'}"
+
+
 async def get_json(key: str):
     try:
         raw = await get_redis().get(key)

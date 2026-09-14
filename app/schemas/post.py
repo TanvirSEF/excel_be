@@ -191,6 +191,20 @@ class PostListItem(BaseModel):
     category: CategoryMini | None = None
 
 
+class SeriesLink(BaseModel):
+    title: str
+    slug: str
+
+
+class SeriesContext(BaseModel):
+    slug: str
+    name: str
+    position: int
+    total: int
+    prev: SeriesLink | None = None
+    next: SeriesLink | None = None
+
+
 class PostCreate(RequestModel):
     title: str = Field(min_length=1, max_length=255)
     slug: str | None = Field(default=None, max_length=255, pattern=SLUG_PATTERN)
@@ -256,6 +270,7 @@ class PostDetail(BaseModel):
     published_at: datetime | None
     scheduled_at: datetime | None
     rejection_reason: str | None = None
+    series: SeriesContext | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -21,6 +21,7 @@ from sqlalchemy.schema import Computed
 
 from app.models.base import Base
 from app.models.category import Category
+from app.models.series import Series
 
 
 class PostStatus(str, enum.Enum):
@@ -39,6 +40,7 @@ class Post(Base):
         Index("ix_posts_author_id", "author_id"),
         Index("ix_posts_published_at", "published_at"),
         Index("ix_posts_is_trending", "is_trending"),
+        Index("ix_posts_series_id", "series_id"),
         Index("idx_posts_content_tsv", "content_tsv", postgresql_using="gin"),
         Index(
             "idx_posts_title_trgm",
@@ -69,6 +71,11 @@ class Post(Base):
         UUID(as_uuid=True), ForeignKey("categories.id")
     )
     category: Mapped[Category | None] = relationship(lazy="selectin")
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id")
+    )
+    series_order: Mapped[int | None] = mapped_column(Integer)
+    series: Mapped[Series | None] = relationship(lazy="selectin")
     status: Mapped[PostStatus] = mapped_column(Enum(PostStatus, name="post_status"))
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

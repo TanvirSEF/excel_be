@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
-from app.models import Category, Post, PostStatus, Redirect
+from app.models import Category, Post, PostStatus, Redirect, Series
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ SITEMAP_TTL = 6 * 3600
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 POST_URL = "/blog/{slug}"
 CATEGORY_URL = "/blog/category/{slug}"
+SERIES_URL = "/series/{slug}"
 
 
 async def get_sitemap() -> str:
@@ -49,6 +50,7 @@ async def build_sitemap() -> str:
             )
         ).all()
         categories = (await session.scalars(select(Category).order_by(Category.slug))).all()
+        series_rows = (await session.scalars(select(Series).order_by(Series.slug))).all()
 
     ET.register_namespace("", SITEMAP_NS)
     urlset = ET.Element(f"{{{SITEMAP_NS}}}urlset")
@@ -63,6 +65,8 @@ async def build_sitemap() -> str:
     add_url(base + "/")
     for category in categories:
         add_url(base + CATEGORY_URL.format(slug=category.slug), category.updated_at)
+    for series in series_rows:
+        add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
     for post in posts:
         add_url(base + POST_URL.format(slug=post.slug), post.updated_at)
 

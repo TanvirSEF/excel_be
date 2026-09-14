@@ -15,7 +15,16 @@ from app.core.exceptions import (
 )
 from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Tag, User, UserRole
-from app.schemas.post import PostAdminItem, PostCreate, PostDetail, PostListItem, PostUpdate, SeoUpdate
+from app.schemas.post import (
+    PostAdminItem,
+    PostCreate,
+    PostDetail,
+    PostListItem,
+    PostUpdate,
+    SeoUpdate,
+    SeriesContext,
+    SeriesLink,
+)
 from app.services import audit_service, cache_service, seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
@@ -420,7 +429,50 @@ async def _to_detail(db: AsyncSession, post: Post) -> PostDetail:
     detail.category_name = category.name if category else None
     detail.category_slug = category.slug if category else None
     detail.tags = await tag_service.post_tag_names(db, post.id)
+    detail.series = await _series_context(db, post)
     return detail
+
+
+async def _series_context(db: AsyncSession, post: Post) -> SeriesContext | None:
+    if post.series_id is None:
+        return None
+
+    series = post.series
+    if series is None:
+        return None
+
+    siblings = (
+        await db.execute(
+            select(Post.id, Post.slug, Post.title)
+            .where(
+                Post.series_id == post.series_id,
+                Post.status == PostStatus.published,
+                Post.deleted_at.is_(None),
+            )
+            .order_by(Post.series_order.asc().nulls_last(), Post.published_at.asc())
+        )
+    ).all()
+
+    index = next((i for i, sibling in enumerate(siblings) if sibling.id == post.id), None)
+    if index is None:
+        return SeriesContext(slug=series.slug, name=series.name, position=1, total=len(siblings))
+
+    return SeriesContext(
+        slug=series.slug,
+        name=series.name,
+        position=index + 1,
+        total=len(siblings),
+        prev=(
+            SeriesLink(title=siblings[index - 1].title, slug=siblings[index - 1].slug)
+            if index > 0
+            else None
+        ),
+        next=(
+            SeriesLink(title=siblings[index + 1].title, slug=siblings[index + 1].slug)
+            if index < len(siblings) - 1
+            else None
+        ),
+    )
 
 
 async def _get_or_404(db: AsyncSession, post_id: UUID) -> Post:
