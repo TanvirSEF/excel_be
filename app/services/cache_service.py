@@ -27,6 +27,10 @@ def series_list_key(category_slug: str | None) -> str:
     return f"series:list:{category_slug or 'all'}"
 
 
+def curriculum_key(track: str) -> str:
+    return f"curriculum:{track}"
+
+
 async def get_json(key: str):
     try:
         raw = await get_redis().get(key)

@@ -199,6 +199,7 @@ async def main():
             await cache_service.delete_pattern("posts:*")
             await cache_service.delete_pattern("post:*")
             await cache_service.delete_pattern("series:*")
+            await cache_service.delete_pattern("curriculum:*")
             await seo_service.invalidate_sitemap()
             print("caches purged (posts, post, series, category tree, sitemap)")
 

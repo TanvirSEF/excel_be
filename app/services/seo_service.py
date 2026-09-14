@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
 from app.models import Category, Post, PostStatus, Redirect, Series
+from app.services.curriculum_service import TRACK_MODULES
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ SITEMAP_KEY = "seo:sitemap"
 SITEMAP_TTL = 6 * 3600
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 POST_URL = "/blog/{slug}"
+LESSON_URL = "/google-sheets/{slug}"
 CATEGORY_URL = "/blog/category/{slug}"
 SERIES_URL = "/series/{slug}"
 
@@ -67,8 +69,10 @@ async def build_sitemap() -> str:
         add_url(base + CATEGORY_URL.format(slug=category.slug), category.updated_at)
     for series in series_rows:
         add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
+    track_categories = set(TRACK_MODULES.get("google-sheets", []))
     for post in posts:
-        add_url(base + POST_URL.format(slug=post.slug), post.updated_at)
+        url = LESSON_URL if (post.category and post.category.slug in track_categories) else POST_URL
+        add_url(base + url.format(slug=post.slug), post.updated_at)
 
     return ET.tostring(urlset, encoding="unicode", xml_declaration=True)
 

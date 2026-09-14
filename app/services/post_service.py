@@ -386,6 +386,7 @@ async def update_seo(db: AsyncSession, post_id: UUID, data: SeoUpdate) -> PostDe
 async def _invalidate_list_caches() -> None:
     await cache_service.delete_pattern("posts:home:*")
     await cache_service.delete_pattern("posts:trending:*")
+    await cache_service.delete_pattern("curriculum:*")
 
 
 def _page_json(result: dict) -> dict:

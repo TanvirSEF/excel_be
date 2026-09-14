@@ -178,6 +178,7 @@ async def main():
         if not args.dry_run and (stats["created"] or stats["promoted"]):
             await cache_service.delete_pattern("posts:*")
             await cache_service.delete_pattern("post:*")
+            await cache_service.delete_pattern("curriculum:*")
             await seo_service.invalidate_sitemap()
             print("caches purged (posts, post, sitemap)")
 
