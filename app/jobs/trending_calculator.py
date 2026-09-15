@@ -30,6 +30,23 @@ async def calculate_trending() -> None:
         ).all()
         top_ids = [row[0] for row in rows]
 
+        # fill the remainder with all-time most-viewed posts so the
+        # trending section stays full on low-traffic days
+        if len(top_ids) < TOP_N:
+            fillers = (
+                await session.scalars(
+                    select(Post.id)
+                    .where(
+                        Post.status == PostStatus.published,
+                        Post.deleted_at.is_(None),
+                        Post.id.not_in(top_ids) if top_ids else True,
+                    )
+                    .order_by(Post.view_count.desc())
+                    .limit(TOP_N - len(top_ids))
+                )
+            ).all()
+            top_ids.extend(fillers)
+
         await session.execute(
             update(Post)
             .where(Post.status == PostStatus.published, Post.deleted_at.is_(None))
