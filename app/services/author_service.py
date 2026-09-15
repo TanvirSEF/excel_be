@@ -31,7 +31,12 @@ async def get_public_author(db: AsyncSession, user_id) -> AuthorOut:
         bio=author.bio,
         joined_at=author.created_at,
         post_count=post_count,
+        website_url=author.website_url,
+        linkedin_url=author.linkedin_url,
+        twitter_url=author.twitter_url,
+        github_url=author.github_url,
     )
+
 
 
 async def list_posts(

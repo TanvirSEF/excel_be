@@ -13,4 +13,9 @@ class AuthorOut(BaseModel):
     bio: str | None = None
     joined_at: datetime = Field(validation_alias="created_at")
     post_count: int = 0
+    website_url: str | None = None
+    linkedin_url: str | None = None
+    twitter_url: str | None = None
+    github_url: str | None = None
+
 
