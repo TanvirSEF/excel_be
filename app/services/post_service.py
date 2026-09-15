@@ -527,6 +527,8 @@ def _render_runs(runs) -> str:
                 text = f"<del>{text}</del>"
             elif mark_type == "code":
                 text = f"<code>{text}</code>"
+            elif mark_type == "kbd":
+                text = f"<kbd>{text}</kbd>"
             elif mark_type == "highlight":
                 text = f"<mark>{text}</mark>"
             elif mark_type == "link":
@@ -555,7 +557,11 @@ def _render_html(content_json: dict) -> str:
         runs_html = _render_runs(_block_runs(block))
         if block_type == "heading":
             level = min(max(block.get("level", 2), 1), 6)
-            rendered.append(f"<h{level}>{runs_html}</h{level}>")
+            num = block.get("num")
+            attrs = (
+                f' data-numhead="{html.escape(str(num), quote=True)}"' if num else ""
+            )
+            rendered.append(f"<h{level}{attrs}>{runs_html}</h{level}>")
         elif block_type == "quote":
             rendered.append(f"<blockquote>{runs_html}</blockquote>")
         elif block_type == "code":
@@ -583,6 +589,57 @@ def _render_html(content_json: dict) -> str:
             if title:
                 attrs += f' data-title="{title}"'
             rendered.append(f"<div {attrs}><p>{runs_html}</p></div>")
+        elif block_type == "table":
+            rows = block.get("rows") or []
+            if rows:
+
+                def cell_html(tag, cell):
+                    inner = (
+                        _render_runs(cell)
+                        if isinstance(cell, list)
+                        else html.escape(str(cell))
+                    )
+                    return f"<{tag}>{inner}</{tag}>"
+
+                if block.get("header"):
+                    head = "".join(cell_html("th", cell) for cell in rows[0])
+                    body = "".join(
+                        "<tr>"
+                        + "".join(cell_html("td", cell) for cell in row)
+                        + "</tr>"
+                        for row in rows[1:]
+                    )
+                    rendered.append(
+                        f"<table><thead><tr>{head}</tr></thead>"
+                        f"<tbody>{body}</tbody></table>"
+                    )
+                else:
+                    body = "".join(
+                        "<tr>"
+                        + "".join(cell_html("td", cell) for cell in row)
+                        + "</tr>"
+                        for row in rows
+                    )
+                    rendered.append(f"<table><tbody>{body}</tbody></table>")
+        elif block_type == "button":
+            label = html.escape(block.get("label", ""))
+            href = html.escape(block.get("href", ""), quote=True)
+            variant = block.get("variant", "primary")
+            rendered.append(
+                f'<div class="py-2"><a href="{href}" data-button="" '
+                f'data-variant="{variant}">{label}</a></div>'
+            )
+        elif block_type == "embed":
+            url = html.escape(block.get("url", ""), quote=True)
+            title = html.escape(
+                block.get("caption") or "Embedded video", quote=True
+            )
+            rendered.append(f'<iframe src="{url}" title="{title}"></iframe>')
+        elif block_type == "accordion":
+            title = html.escape(block.get("title", ""))
+            rendered.append(
+                f"<details><summary>{title}</summary><p>{runs_html}</p></details>"
+            )
         else:
             rendered.append(f"<p>{runs_html}</p>")
     return sanitize_html("\n".join(rendered))

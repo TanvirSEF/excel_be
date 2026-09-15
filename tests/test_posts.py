@@ -96,6 +96,57 @@ async def test_create_renders_marks_into_content_html(client, admin_token):
     assert 'data-title="Key Takeaways"' in post.content_html
 
 
+async def test_create_renders_all_block_types_into_content_html(client, admin_token):
+    created = await create_post(
+        client,
+        admin_token,
+        content_json={
+            "blocks": [
+                {"type": "heading", "text": "Steps", "level": 2, "num": "1"},
+                {
+                    "type": "table",
+                    "header": True,
+                    "rows": [["Name", "Value"], ["VLOOKUP", "90"]],
+                },
+                {"type": "table", "header": False, "rows": [["a", "b"]]},
+                {
+                    "type": "button",
+                    "label": "Open guide",
+                    "href": "https://example.com",
+                    "variant": "outline",
+                },
+                {
+                    "type": "embed",
+                    "url": "https://www.youtube.com/watch?v=abc",
+                    "caption": "Demo",
+                },
+                {"type": "accordion", "title": "Case-sensitive?", "text": "No."},
+                {
+                    "type": "paragraph",
+                    "text": "Press Ctrl",
+                    "content": [
+                        {"text": "Press "},
+                        {"text": "Ctrl", "marks": [{"type": "kbd"}]},
+                    ],
+                },
+            ]
+        },
+    )
+
+    async with AsyncSessionLocal() as db:
+        post = await db.scalar(select(Post).where(Post.slug == created["slug"]))
+    assert post is not None
+    assert '<h2 data-numhead="1">Steps</h2>' in post.content_html
+    assert "<thead><tr><th>Name</th><th>Value</th></tr></thead>" in post.content_html
+    assert "<td>VLOOKUP</td>" in post.content_html
+    assert "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" in post.content_html
+    assert 'data-button="" data-variant="outline"' in post.content_html
+    assert 'href="https://example.com">Open guide</a>' in post.content_html
+    assert '<iframe src="https://www.youtube.com/watch?v=abc" title="Demo">' in post.content_html
+    assert "<details><summary>Case-sensitive?</summary><p>No.</p></details>" in post.content_html
+    assert "<kbd>Ctrl</kbd>" in post.content_html
+
+
 async def login(client: httpx.AsyncClient, email: str, password: str) -> dict:
     response = await client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
