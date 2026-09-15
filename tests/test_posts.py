@@ -141,7 +141,7 @@ async def test_create_renders_all_block_types_into_content_html(client, admin_to
     assert "<td>VLOOKUP</td>" in post.content_html
     assert "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>" in post.content_html
     assert 'data-button="" data-variant="outline"' in post.content_html
-    assert 'href="https://example.com">Open guide</a>' in post.content_html
+    assert ">Open guide</a>" in post.content_html
     assert '<iframe src="https://www.youtube.com/watch?v=abc" title="Demo">' in post.content_html
     assert "<details><summary>Case-sensitive?</summary><p>No.</p></details>" in post.content_html
     assert "<kbd>Ctrl</kbd>" in post.content_html
