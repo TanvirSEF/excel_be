@@ -1,15 +1,16 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AuthorOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: uuid.UUID
     name: str
-    avatar_url: str | None
-    bio: str | None
-    joined_at: datetime
-    post_count: int
+    avatar_url: str | None = None
+    bio: str | None = None
+    joined_at: datetime = Field(validation_alias="created_at")
+    post_count: int = 0
+

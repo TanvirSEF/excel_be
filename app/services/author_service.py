@@ -24,9 +24,14 @@ async def get_public_author(db: AsyncSession, user_id) -> AuthorOut:
     if not post_count:
         raise NotFoundException("Author not found", code="AUTHOR_NOT_FOUND")
 
-    detail = AuthorOut.model_validate(author)
-    detail.post_count = post_count
-    return detail
+    return AuthorOut(
+        id=author.id,
+        name=author.name,
+        avatar_url=author.avatar_url,
+        bio=author.bio,
+        joined_at=author.created_at,
+        post_count=post_count,
+    )
 
 
 async def list_posts(
