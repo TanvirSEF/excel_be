@@ -76,7 +76,12 @@ async def list_public(
         if cached is not None:
             return cached
 
-    result = await _page(db, pagination, conditions)
+    result = await _page(
+        db,
+        pagination,
+        conditions,
+        order_by=[Post.is_trending_pinned.desc(), Post.view_count.desc()] if trending else None,
+    )
 
     if cache_key is not None:
         await cache_service.set_json(cache_key, _page_json(result), cache_service.LIST_TTL)
@@ -383,6 +388,17 @@ async def update_seo(db: AsyncSession, post_id: UUID, data: SeoUpdate) -> PostDe
     return await _to_detail(db, post)
 
 
+async def set_trending_pin(db: AsyncSession, post_id: UUID, pinned: bool) -> PostAdminItem:
+    post = await _get_or_404(db, post_id)
+
+    post.is_trending_pinned = pinned
+    post.is_trending = pinned
+    await db.commit()
+    await db.refresh(post)
+    await _invalidate_list_caches()
+    return PostAdminItem.model_validate(post)
+
+
 async def _invalidate_list_caches() -> None:
     await cache_service.delete_pattern("posts:home:*")
     await cache_service.delete_pattern("posts:trending:*")
@@ -399,13 +415,18 @@ def _page_json(result: dict) -> dict:
     }
 
 
-async def _page(db: AsyncSession, pagination: PaginationParams, conditions: list) -> dict:
+async def _page(
+    db: AsyncSession,
+    pagination: PaginationParams,
+    conditions: list,
+    order_by: list | None = None,
+) -> dict:
     total = await db.scalar(select(func.count()).select_from(Post).where(*conditions))
     posts = (
         await db.scalars(
             select(Post)
             .where(*conditions)
-            .order_by(Post.published_at.desc())
+            .order_by(*(order_by or [Post.published_at.desc()]))
             .offset(pagination.offset)
             .limit(pagination.page_size)
         )

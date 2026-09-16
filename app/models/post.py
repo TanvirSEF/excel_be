@@ -77,6 +77,7 @@ class Post(Base):
     status: Mapped[PostStatus] = mapped_column(Enum(PostStatus, name="post_status"))
     view_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    is_trending_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     reading_time_minutes: Mapped[int | None] = mapped_column(SmallInteger)
     meta_title: Mapped[str | None] = mapped_column(String(255))
     meta_description: Mapped[str | None] = mapped_column(String(500))

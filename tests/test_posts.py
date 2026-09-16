@@ -266,3 +266,40 @@ async def test_failed_update_after_tag_sync_rolls_back_tags(client, admin_token,
             )
 
     assert await current_tags(UUID(post["id"])) == ["Alpha Tag"]
+
+
+async def test_trending_pin_lifecycle(client, admin_token):
+    created = await create_post(client, admin_token)
+    post_id = created["id"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    response = await client.patch(
+        f"/api/v1/posts/{post_id}/trending", headers=headers, json={"pinned": True}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["is_trending_pinned"] is True
+    assert body["is_trending"] is True
+
+    async with AsyncSessionLocal() as db:
+        post = await db.scalar(select(Post).where(Post.id == UUID(post_id)))
+        assert post.is_trending_pinned is True
+        assert post.is_trending is True
+
+    response = await client.patch(
+        f"/api/v1/posts/{post_id}/trending", headers=headers, json={"pinned": False}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["is_trending_pinned"] is False
+    assert body["is_trending"] is False
+
+
+async def test_trending_pin_forbidden_for_writer(client):
+    writer_token = await get_token(client, "writer@test.com", "WriterPass123!")
+    response = await client.patch(
+        "/api/v1/posts/00000000-0000-0000-0000-000000000000/trending",
+        headers={"Authorization": f"Bearer {writer_token}"},
+        json={"pinned": True},
+    )
+    assert response.status_code == 403

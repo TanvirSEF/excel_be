@@ -284,6 +284,8 @@ class PostAdminItem(BaseModel):
     status: PostStatus
     author_name: str = ""
     category_name: str | None = None
+    is_trending: bool = False
+    is_trending_pinned: bool = False
     rejection_reason: str | None = None
     updated_at: datetime
     published_at: datetime | None = None
@@ -295,6 +297,10 @@ class RejectRequest(RequestModel):
 
 class ScheduleRequest(RequestModel):
     scheduled_at: datetime
+
+
+class TrendingPinRequest(RequestModel):
+    pinned: bool
 
 
 class SeoUpdate(RequestModel):

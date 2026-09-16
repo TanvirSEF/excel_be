@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
 from app.jobs.scheduled_publisher import publish_scheduled_posts
+from app.jobs.trending_calculator import calculate_trending
 from app.models import AuditLog, Post, PostStatus, User, UserRole
 
 
@@ -78,3 +79,37 @@ async def test_scheduled_publisher_ignores_future_posts():
     async with AsyncSessionLocal() as db:
         fresh = await db.scalar(select(Post).where(Post.id == post_id))
     assert fresh.status == PostStatus.scheduled
+
+
+async def test_trending_calculator_respects_pinned_posts():
+    async with AsyncSessionLocal() as db:
+        author = await db.scalar(select(User).where(User.role == UserRole.super_admin))
+        pinned = Post(
+            title="Jobs test pinned",
+            slug=f"jobs-test-{uuid4().hex[:8]}",
+            content_json={"blocks": [{"type": "paragraph", "text": "body"}]},
+            author_id=author.id,
+            status=PostStatus.published,
+            is_trending_pinned=True,
+        )
+        plain = Post(
+            title="Jobs test plain",
+            slug=f"jobs-test-{uuid4().hex[:8]}",
+            content_json={"blocks": [{"type": "paragraph", "text": "body"}]},
+            author_id=author.id,
+            status=PostStatus.published,
+        )
+        db.add_all([pinned, plain])
+        await db.commit()
+        pinned_id, plain_id = pinned.id, plain.id
+
+    await calculate_trending()
+
+    async with AsyncSessionLocal() as db:
+        fresh_pinned = await db.scalar(select(Post).where(Post.id == pinned_id))
+        assert fresh_pinned.is_trending_pinned is True
+        assert fresh_pinned.is_trending is True
+
+        fresh_plain = await db.scalar(select(Post).where(Post.id == plain_id))
+        assert fresh_plain.is_trending_pinned is False
+        assert fresh_plain.is_trending is False

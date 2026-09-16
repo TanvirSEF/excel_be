@@ -18,47 +18,58 @@ async def calculate_trending() -> None:
     since = datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)
 
     async with AsyncSessionLocal() as session:
-        rows = (
-            await session.execute(
-                select(PostView.post_id, func.count().label("views"))
-                .where(PostView.viewed_at >= since)
-                .group_by(PostView.post_id)
-                .having(func.count() >= MIN_VIEWS)
-                .order_by(func.count().desc())
-                .limit(TOP_N)
+        published = (Post.status == PostStatus.published, Post.deleted_at.is_(None))
+
+        # manually pinned posts stay trending regardless of view activity
+        pinned_ids = (
+            await session.scalars(
+                select(Post.id).where(Post.is_trending_pinned.is_(True), *published)
             )
         ).all()
-        top_ids = [row[0] for row in rows]
 
-        # fill the remainder with all-time most-viewed posts so the
-        # trending section stays full on low-traffic days
-        if len(top_ids) < TOP_N:
-            fillers = (
-                await session.scalars(
-                    select(Post.id)
-                    .where(
-                        Post.status == PostStatus.published,
-                        Post.deleted_at.is_(None),
-                        Post.id.not_in(top_ids) if top_ids else True,
-                    )
-                    .order_by(Post.view_count.desc())
-                    .limit(TOP_N - len(top_ids))
+        top_ids: list = []
+        slots = max(TOP_N - len(pinned_ids), 0)
+        if slots:
+            rows = (
+                await session.execute(
+                    select(PostView.post_id, func.count().label("views"))
+                    .where(PostView.viewed_at >= since)
+                    .group_by(PostView.post_id)
+                    .having(func.count() >= MIN_VIEWS)
+                    .order_by(func.count().desc())
+                    .limit(slots)
                 )
             ).all()
-            top_ids.extend(fillers)
+            top_ids = [row[0] for row in rows]
+
+            # fill the remainder with all-time most-viewed posts so the
+            # trending section stays full on low-traffic days
+            remaining = slots - len(top_ids)
+            if remaining > 0:
+                excluded = pinned_ids + top_ids
+                fillers = (
+                    await session.scalars(
+                        select(Post.id)
+                        .where(*published, Post.id.not_in(excluded) if excluded else True)
+                        .order_by(Post.view_count.desc())
+                        .limit(remaining)
+                    )
+                ).all()
+                top_ids.extend(fillers)
+
+        trending_ids = pinned_ids + top_ids
 
         await session.execute(
             update(Post)
-            .where(Post.status == PostStatus.published, Post.deleted_at.is_(None))
+            .where(*published, Post.is_trending_pinned.is_(False))
             .values(is_trending=False)
         )
-        if top_ids:
+        if trending_ids:
             await session.execute(
-                update(Post).where(Post.id.in_(top_ids)).values(is_trending=True)
+                update(Post).where(Post.id.in_(trending_ids)).values(is_trending=True)
             )
         await session.commit()
 
     await cache_service.delete_pattern("posts:trending:*")
 
-    if top_ids:
-        logger.info("Marked %d posts as trending", len(top_ids))
+    logger.info("Marked %d posts as trending (%d pinned)", len(trending_ids), len(pinned_ids))

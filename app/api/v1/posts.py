@@ -20,6 +20,7 @@ from app.schemas.post import (
     RejectRequest,
     ScheduleRequest,
     SeoUpdate,
+    TrendingPinRequest,
 )
 from app.services import asset_service, comment_service, post_service
 
@@ -185,3 +186,13 @@ async def update_seo(
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.update_seo(db, post_id, data)
+
+
+@router.patch("/{post_id}/trending", response_model=PostAdminItem)
+async def set_trending_pin(
+    post_id: UUID,
+    data: TrendingPinRequest,
+    user: User = Depends(require_role(*EDITORS)),
+    db: AsyncSession = Depends(get_db),
+) -> PostAdminItem:
+    return await post_service.set_trending_pin(db, post_id, data.pinned)
