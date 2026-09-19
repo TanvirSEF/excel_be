@@ -12,6 +12,8 @@ Usage (from excel_be/):
 """
 import argparse
 import asyncio
+import sys
+sys.path.insert(0, ".")
 
 from sqlalchemy import select
 

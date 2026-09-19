@@ -89,3 +89,40 @@ def test_is_broken_detects_empty_and_missing_docs():
     assert is_broken({"blocks": []})
     assert is_broken({"blocks": [{"type": "paragraph", "text": ""}]})
     assert not is_broken({"blocks": [{"type": "paragraph", "text": "ok", "content": [{"text": "ok"}]}]})
+
+
+def test_span_wrapped_image_extracted():
+    html = '<p>Intro</p><span><img src="https://r2.dev/test.webp" alt="test" width="600" height="400"></span><p>Outro</p>'
+    doc = convert(html)
+    imgs = blocks_of_type(doc, "image")
+    assert len(imgs) == 1
+    assert imgs[0]["url"] == "https://r2.dev/test.webp"
+    assert imgs[0]["alt"] == "test"
+    assert imgs[0]["width"] == 600
+    assert imgs[0]["height"] == 400
+
+
+def test_anchor_wrapped_image_extracted():
+    html = '<a href="https://example.com/view"><img src="https://r2.dev/thumb.webp" alt="thumb"></a>'
+    doc = convert(html)
+    imgs = blocks_of_type(doc, "image")
+    assert len(imgs) == 1
+    assert imgs[0]["url"] == "https://r2.dev/thumb.webp"
+    assert imgs[0]["alt"] == "thumb"
+
+
+def test_nested_spans_image_extracted():
+    html = '<span><span><img src="https://r2.dev/nested.webp" alt="nested"></span></span>'
+    doc = convert(html)
+    imgs = blocks_of_type(doc, "image")
+    assert len(imgs) == 1
+    assert imgs[0]["url"] == "https://r2.dev/nested.webp"
+
+
+def test_div_with_nested_span_images_extracted():
+    html = '<div><span class="aligncenter"><img src="https://r2.dev/in-div.webp" alt="in div"></span></div>'
+    doc = convert(html)
+    imgs = blocks_of_type(doc, "image")
+    assert len(imgs) == 1
+    assert imgs[0]["url"] == "https://r2.dev/in-div.webp"
+

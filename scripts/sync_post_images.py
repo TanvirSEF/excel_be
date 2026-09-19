@@ -1,9 +1,11 @@
-﻿import argparse
+import argparse
 import asyncio
 import hashlib
 import io
 import logging
 import re
+import sys
+sys.path.insert(0, ".")
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 

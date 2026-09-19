@@ -161,6 +161,8 @@ def convert(html):
         blocks.append({"type": "paragraph", "text": text, "content": runs})
 
     def flush_pending(pending):
+        if not pending:
+            return
         paragraphs = [[]]
 
         def add_runs(runs):
@@ -176,6 +178,12 @@ def convert(html):
                         paragraphs[-1].append(new_run)
 
         for node in pending:
+            if isinstance(node, Tag):
+                for img in node.find_all("img"):
+                    b = image_block(img)
+                    if b:
+                        blocks.append(b)
+
             if isinstance(node, NavigableString):
                 add_runs([{"text": str(node)}])
             else:
@@ -187,7 +195,7 @@ def convert(html):
         pending = []
         for child in node.children:
             if isinstance(child, (NavigableString, Tag)) and (
-                isinstance(child, NavigableString) or child.name in INLINE_TAGS
+                isinstance(child, NavigableString) or (child.name in INLINE_TAGS and not child.find("img"))
             ):
                 pending.append(child)
                 continue
@@ -270,6 +278,14 @@ def convert(html):
                 if block:
                     blocks.append(block)
 
+            elif name in INLINE_TAGS and child.find("img"):
+                for img in child.find_all("img"):
+                    block = image_block(img)
+                    if block:
+                        blocks.append(block)
+                runs = collect_runs(child, [])
+                emit_paragraph(runs)
+
             elif name == "figure":
                 img = child.find("img")
                 caption = child.find("figcaption")
@@ -321,7 +337,7 @@ def convert(html):
                         image = image_block(img)
                         if image:
                             blocks.append(image)
-                elif has_block_child(child):
+                elif has_block_child(child) or child.find("img"):
                     walk(child)
                 else:
                     for img in child.find_all("img"):
@@ -341,9 +357,17 @@ def convert(html):
                 })
 
             elif name in MARK_TAGS or name == "a":
+                for img in child.find_all("img"):
+                    block = image_block(img)
+                    if block:
+                        blocks.append(block)
                 emit_paragraph(collect_runs(child, []))
 
             else:
+                for img in child.find_all("img"):
+                    block = image_block(img)
+                    if block:
+                        blocks.append(block)
                 blocks.append({"type": "html", "html": sanitize_html(str(child))})
 
         flush_pending(pending)
