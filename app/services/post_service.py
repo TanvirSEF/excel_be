@@ -184,6 +184,15 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
                 "Could not generate a slug from this title", code="SLUG_REQUIRED"
             )
 
+    author_id = user.id
+    if data.author_id is not None and user.role in EDITORS:
+        target_author = await db.scalar(
+            select(User).where(User.id == data.author_id, User.is_active.is_(True))
+        )
+        if target_author is None:
+            raise NotFoundException("Author not found or inactive", code="AUTHOR_NOT_FOUND")
+        author_id = target_author.id
+
     post = Post(
         title=data.title,
         slug=slug,
@@ -191,7 +200,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         content_json=data.content_json,
         content_html=_render_html(data.content_json),
         featured_image_url=data.featured_image_url,
-        author_id=user.id,
+        author_id=author_id,
         category_id=data.category_id,
         status=PostStatus.draft,
         reading_time_minutes=reading_time_minutes(data.content_json),
@@ -234,6 +243,7 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
 
     fields = data.model_fields_set
     old_slug = post.slug
+    author_changed = False
 
     if "slug" in fields and data.slug and data.slug != post.slug:
         if await db.scalar(select(Post).where(Post.slug == data.slug)):
@@ -241,6 +251,28 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
 
     if "category_id" in fields and data.category_id is not None:
         await _category_or_404(db, data.category_id)
+
+    if "author_id" in fields:
+        if user.role not in EDITORS:
+            raise PermissionDeniedException("Only editors can reassign post author")
+        if data.author_id is not None and data.author_id != post.author_id:
+            target_author = await db.scalar(
+                select(User).where(User.id == data.author_id, User.is_active.is_(True))
+            )
+            if target_author is None:
+                raise NotFoundException("Author not found or inactive", code="AUTHOR_NOT_FOUND")
+            old_author_id = post.author_id
+            post.author_id = target_author.id
+            author_changed = True
+            audit_service.record(
+                db,
+                user.id,
+                "post.author_change",
+                "post",
+                post.id,
+                {"old_author": str(old_author_id), "new_author": str(post.author_id)},
+            )
+        fields.discard("author_id")
 
     if "tags" in fields:
         await tag_service.sync_post_tags(db, post, data.tags or [])
@@ -263,7 +295,7 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         cache_service.post_detail_key(post.slug),
         cache_service.post_detail_key(old_slug),
     )
-    if fields & {"title", "slug", "excerpt", "featured_image_url", "content_json"}:
+    if author_changed or (fields & {"title", "slug", "excerpt", "featured_image_url", "content_json"}):
         await _invalidate_list_caches()
     if post.slug != old_slug:
         await seo_service.invalidate_sitemap()

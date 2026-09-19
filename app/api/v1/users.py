@@ -13,6 +13,8 @@ from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+WRITERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.technical_writer)
+
 
 @router.get("", response_model=Page[UserOut])
 async def list_users(
@@ -21,6 +23,14 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await user_service.list_users(db, pagination)
+
+
+@router.get("/authors", response_model=list[UserOut])
+async def list_authors(
+    user: User = Depends(require_role(*WRITERS)),
+    db: AsyncSession = Depends(get_db),
+) -> list[User]:
+    return await user_service.list_authors(db)
 
 
 @router.get("/{user_id}", response_model=UserOut)

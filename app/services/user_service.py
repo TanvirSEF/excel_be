@@ -31,6 +31,18 @@ async def list_users(db: AsyncSession, pagination: PaginationParams) -> dict:
     }
 
 
+async def list_authors(db: AsyncSession) -> list[User]:
+    return list(
+        (
+            await db.scalars(
+                select(User)
+                .where(User.is_active.is_(True))
+                .order_by(User.name.asc())
+            )
+        ).all()
+    )
+
+
 async def get_user(db: AsyncSession, current_user: User, user_id: UUID) -> User:
     user = await db.scalar(select(User).where(User.id == user_id))
     if user is None:

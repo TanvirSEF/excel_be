@@ -212,6 +212,7 @@ class PostCreate(RequestModel):
     content_json: dict
     featured_image_url: str | None = None
     category_id: uuid.UUID | None = None
+    author_id: uuid.UUID | None = None
     tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
@@ -230,6 +231,7 @@ class PostUpdate(RequestModel):
     content_json: dict | None = None
     featured_image_url: str | None = None
     category_id: uuid.UUID | None = None
+    author_id: uuid.UUID | None = None
     tags: list[str] | None = None
     meta_title: str | None = Field(default=None, max_length=255)
     meta_description: str | None = Field(default=None, max_length=500)
