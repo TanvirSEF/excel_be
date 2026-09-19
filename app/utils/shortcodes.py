@@ -14,20 +14,25 @@ import re
 _ATTRS = r"""(?:\s*[a-zA-Z_]+=(?:"[^"]*"|'[^']*'))*"""
 _ATTR = re.compile(r"""([a-zA-Z_]+)=(?:"([^"]*)"|'([^']*)')""")
 
-_TITLEBOX_RE = re.compile(r"\[wpsm_titlebox(" + _ATTRS + r")\](.*?)\[/wpsm_titlebox\]", re.DOTALL)
-_BOX_RE = re.compile(r"\[wpsm_box(" + _ATTRS + r")\](.*?)\[/wpsm_box\]", re.DOTALL)
-_NUMHEAD_RE = re.compile(r"\[wpsm_numhead(" + _ATTRS + r")\](.*?)\[/wpsm_numhead\]", re.DOTALL)
-_HIGHLIGHT_RE = re.compile(r"\[su_highlight" + _ATTRS + r"\](.*?)\[/su_highlight\]", re.DOTALL)
-_SC_ENCLOSED_RE = re.compile(r"\[sc[:\s](" + _ATTRS + r")\](.*?)\[/sc\]", re.DOTALL)
-_SC_SELF_RE = re.compile(r"\[sc[:\s]" + _ATTRS + r"\]", re.DOTALL)
-_BUTTON_RE = re.compile(r"\[wpsm_button(" + _ATTRS + r")\](.*?)\[/wpsm_button\]", re.DOTALL)
-_COLORTABLE_RE = re.compile(r"\[wpsm_colortable(" + _ATTRS + r")\](.*?)\[/wpsm_colortable\]", re.DOTALL)
+_TITLEBOX_RE = re.compile(r"\[wpsm_titlebox([^\]]*)\](.*?)\[/wpsm_titlebox\]", re.DOTALL | re.IGNORECASE)
+_UNCLOSED_TITLEBOX_RE = re.compile(
+    r"\[wpsm_titlebox([^\]]*)\](.*?)(?=<h[1-6]|\bIn this article|<div class=\"py-2\"|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+_BOX_RE = re.compile(r"\[wpsm_box([^\]]*)\](.*?)\[/wpsm_box\]", re.DOTALL | re.IGNORECASE)
+_NUMHEAD_RE = re.compile(r"\[wpsm_numhead([^\]]*)\](.*?)\[/wpsm_numhead\]", re.DOTALL | re.IGNORECASE)
+_HIGHLIGHT_RE = re.compile(r"\[su_highlight([^\]]*)\](.*?)\[/su_highlight\]", re.DOTALL | re.IGNORECASE)
+_SC_ENCLOSED_RE = re.compile(r"\[sc[:\s]([^\]]*?)\](.*?)\[/sc\]", re.DOTALL | re.IGNORECASE)
+_SC_SELF_RE = re.compile(r"\[sc[:\s]([^\]]*?)\]", re.DOTALL | re.IGNORECASE)
+_BUTTON_RE = re.compile(r"\[wpsm_button([^\]]*)\](.*?)\[/wpsm_button\]", re.DOTALL | re.IGNORECASE)
+_COLORTABLE_RE = re.compile(r"\[wpsm_colortable([^\]]*)\](.*?)\[/wpsm_colortable\]", re.DOTALL | re.IGNORECASE)
 
 _BOX_VARIANTS = {"warning": "warning", "danger": "danger"}
 
 
 def _get_attrs(text: str) -> dict[str, str]:
-    return {k: v1 or v2 for k, v1, v2 in _ATTR.findall(text)}
+    normalized = text.replace("&nbsp;", " ").replace("\xa0", " ")
+    return {k: v1 or v2 for k, v1, v2 in _ATTR.findall(normalized)}
 
 
 def _callout(inner: str, title: str = "", variant: str = "info") -> str:
@@ -53,6 +58,10 @@ def expand_shortcodes(content: str) -> str:
         attrs = _get_attrs(match.group(1))
         return _callout(match.group(2), title=attrs.get("title", ""), variant="tip")
 
+    def unclosed_titlebox(match: re.Match) -> str:
+        attrs = _get_attrs(match.group(1))
+        return _callout(match.group(2), title=attrs.get("title", "Key Takeaways"), variant="tip")
+
     def box(match: re.Match) -> str:
         attrs = _get_attrs(match.group(1))
         variant = _BOX_VARIANTS.get(attrs.get("type", ""), "info")
@@ -67,7 +76,11 @@ def expand_shortcodes(content: str) -> str:
         return _callout(match.group(2), title=attrs.get("title", ""))
 
     def sc_self(match: re.Match) -> str:
-        attrs = _get_attrs(match.group(0))
+        attr_text = match.group(1)
+        attrs = _get_attrs(attr_text)
+        content_match = re.search(r'content=["\'](.*)["\'](?:\s*\]|\s*$)', attr_text, re.DOTALL)
+        if content_match:
+            attrs["content"] = content_match.group(1)
         if "content" not in attrs:
             return match.group(0)
         return _callout(html.unescape(attrs["content"]), title=attrs.get("title", ""))
@@ -81,6 +94,7 @@ def expand_shortcodes(content: str) -> str:
     expanded = _SC_ENCLOSED_RE.sub(sc_enclosed, content)
     expanded = _SC_SELF_RE.sub(sc_self, expanded)
     expanded = _TITLEBOX_RE.sub(titlebox, expanded)
+    expanded = _UNCLOSED_TITLEBOX_RE.sub(unclosed_titlebox, expanded)
     expanded = _BOX_RE.sub(box, expanded)
     expanded = _BUTTON_RE.sub(button, expanded)
     # colortable is purely a table skin — keep the wrapped table itself
@@ -88,3 +102,4 @@ def expand_shortcodes(content: str) -> str:
     expanded = _NUMHEAD_RE.sub(numhead, expanded)
     expanded = _HIGHLIGHT_RE.sub(lambda m: f"<kbd>{m.group(1)}</kbd>", expanded)
     return expanded
+

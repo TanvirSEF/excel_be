@@ -14,6 +14,10 @@ MARK_TAGS = {
     "b": "bold",
     "em": "italic",
     "i": "italic",
+    "u": "underline",
+    "ins": "underline",
+    "sup": "sup",
+    "sub": "sub",
     "del": "strike",
     "s": "strike",
     "strike": "strike",
@@ -34,29 +38,34 @@ CALLOUT_VARIANTS = {"info", "tip", "warning", "danger"}
 
 
 def collect_runs(node, marks):
+    if isinstance(node, NavigableString):
+        text = str(node)
+        if not text:
+            return []
+        run = {"text": text}
+        if marks:
+            run["marks"] = list(marks)
+        return [run]
+
+    if not isinstance(node, Tag):
+        return []
+
+    if node.name == "br":
+        return [{"text": "\n"}]
+
+    node_marks = list(marks)
+    if node.name in MARK_TAGS:
+        mark_type = MARK_TAGS[node.name]
+        if not any(m.get("type") == mark_type for m in node_marks):
+            node_marks.append({"type": mark_type})
+    elif node.name == "a":
+        href = (node.get("href") or "").strip()
+        if href and not any(m.get("type") == "link" for m in node_marks):
+            node_marks.append({"type": "link", "href": href})
+
     runs = []
     for child in node.children:
-        if isinstance(child, NavigableString):
-            text = str(child)
-            if text:
-                run = {"text": text}
-                if marks:
-                    run["marks"] = list(marks)
-                runs.append(run)
-            continue
-        if not isinstance(child, Tag):
-            continue
-        if child.name == "br":
-            runs.append({"text": "\n"})
-            continue
-        child_marks = marks
-        if child.name in MARK_TAGS:
-            child_marks = marks + [{"type": MARK_TAGS[child.name]}]
-        elif child.name == "a":
-            href = (child.get("href") or "").strip()
-            if href:
-                child_marks = marks + [{"type": "link", "href": href}]
-        runs.extend(collect_runs(child, child_marks))
+        runs.extend(collect_runs(child, node_marks))
     return runs
 
 
@@ -116,14 +125,7 @@ def table_block(table):
 
 
 def _collect_marked(node):
-    marks = []
-    if node.name in MARK_TAGS:
-        marks.append({"type": MARK_TAGS[node.name]})
-    elif node.name == "a":
-        href = (node.get("href") or "").strip()
-        if href:
-            marks.append({"type": "link", "href": href})
-    return collect_runs(node, marks)
+    return collect_runs(node, [])
 
 
 def _callout_parts(div):

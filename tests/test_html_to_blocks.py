@@ -126,3 +126,71 @@ def test_div_with_nested_span_images_extracted():
     assert len(imgs) == 1
     assert imgs[0]["url"] == "https://r2.dev/in-div.webp"
 
+
+def test_document_level_strong_and_b_produce_runs():
+    html = "Hello <strong>world</strong> and <b>again</b> without p tags"
+    doc = convert(html)
+    runs = doc["blocks"][0]["content"]
+    assert {"text": "world", "marks": [{"type": "bold"}]} in runs
+    assert {"text": "again", "marks": [{"type": "bold"}]} in runs
+
+
+def test_document_level_link_and_code_produce_runs():
+    html = 'Check out <a href="https://example.com">this link</a> and <code>=VLOOKUP()</code>'
+    doc = convert(html)
+    runs = doc["blocks"][0]["content"]
+    assert {"text": "this link", "marks": [{"type": "link", "href": "https://example.com"}]} in runs
+    assert {"text": "=VLOOKUP()", "marks": [{"type": "code"}]} in runs
+
+
+def test_nested_marks_produce_multiple_marks():
+    html = "<p><strong><em>bold italic</em></strong></p>"
+    doc = convert(html)
+    runs = doc["blocks"][0]["content"]
+    assert len(runs) == 1
+    mark_types = {m["type"] for m in runs[0]["marks"]}
+    assert mark_types == {"bold", "italic"}
+
+
+def test_underline_sup_and_sub_marks():
+    html = "<p><u>underlined</u>, <sup>squared</sup>, and <sub>indexed</sub></p>"
+    doc = convert(html)
+    runs = doc["blocks"][0]["content"]
+    assert {"text": "underlined", "marks": [{"type": "underline"}]} in runs
+    assert {"text": "squared", "marks": [{"type": "sup"}]} in runs
+    assert {"text": "indexed", "marks": [{"type": "sub"}]} in runs
+
+
+def test_wpsm_button_with_nbsp_attributes():
+    from app.utils.shortcodes import expand_shortcodes
+    raw = '[wpsm_button link="https://example.com/file.xlsx" border_radius="4px"&nbsp; rel="nofollow"]Download File[/wpsm_button]'
+    expanded = expand_shortcodes(raw)
+    doc = convert(expanded)
+    buttons = blocks_of_type(doc, "button")
+    assert len(buttons) == 1
+    assert buttons[0]["label"] == "Download File"
+    assert buttons[0]["href"] == "https://example.com/file.xlsx"
+
+
+def test_sc_legend_box_with_inner_quotes():
+    from app.utils.shortcodes import expand_shortcodes
+    raw = '[sc name="legend_box" title="Explanation" content="This has "quoted text" inside"]'
+    expanded = expand_shortcodes(raw)
+    doc = convert(expanded)
+    callouts = blocks_of_type(doc, "callout")
+    assert len(callouts) == 1
+    assert callouts[0]["title"] == "Explanation"
+    assert "quoted text" in callouts[0]["text"]
+
+
+def test_unclosed_wpsm_titlebox():
+    from app.utils.shortcodes import expand_shortcodes
+    raw = '[wpsm_titlebox title="Key Takeaways" style="main"]\nTakeaway bullet 1\nTakeaway bullet 2\n<h2>Section 1</h2>'
+    expanded = expand_shortcodes(raw)
+    doc = convert(expanded)
+    callouts = blocks_of_type(doc, "callout")
+    assert len(callouts) == 1
+    assert callouts[0]["title"] == "Key Takeaways"
+    assert "Takeaway bullet 1" in callouts[0]["text"]
+
+
