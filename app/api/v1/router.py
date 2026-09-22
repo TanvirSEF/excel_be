@@ -1,11 +1,31 @@
-﻿from fastapi import APIRouter
+from fastapi import APIRouter
 
-from app.api.v1 import analytics, assets, audit, auth, authors, categories, comments, contact, curriculum, imports, media, newsletter, posts, search, series, tags, users
+from app.api.v1 import (
+    analytics,
+    assets,
+    audit,
+    auth,
+    authors,
+    categories,
+    comments,
+    contact,
+    curriculum,
+    imports,
+    media,
+    newsletter,
+    posts,
+    roles,
+    search,
+    series,
+    tags,
+    users,
+)
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
 api_router.include_router(authors.router)
 api_router.include_router(users.router)
+api_router.include_router(roles.router)
 api_router.include_router(categories.router)
 api_router.include_router(posts.router)
 api_router.include_router(assets.router)
