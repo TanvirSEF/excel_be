@@ -46,3 +46,4 @@ class OverviewAnalytics(BaseModel):
     views_last_7_days: int
     top_posts_7_days: list[TopPost]
     trending: list[TrendingPost]
+    daily_views_7_days: list[DailyViews] = []

@@ -118,6 +118,20 @@ async def overview(db: AsyncSession) -> OverviewAnalytics:
         select(func.count()).select_from(PostView).where(PostView.viewed_at >= seven_days_ago)
     )
 
+    daily_rows = (
+        await db.execute(
+            select(utc_date.label("day"), func.count())
+            .where(PostView.viewed_at >= seven_days_ago)
+            .group_by("day")
+        )
+    ).all()
+    by_day = {row[0]: row[1] for row in daily_rows}
+    today = now.date()
+    daily_series = [
+        DailyViews(date=today - timedelta(days=offset), views=by_day.get(today - timedelta(days=offset), 0))
+        for offset in range(6, -1, -1)
+    ]
+
     top_rows = (
         await db.execute(
             select(Post.id, Post.title, Post.slug, func.count().label("views"))
@@ -152,4 +166,5 @@ async def overview(db: AsyncSession) -> OverviewAnalytics:
             TopPost(post_id=row[0], title=row[1], slug=row[2], views=row[3]) for row in top_rows
         ],
         trending=[TrendingPost(id=p.id, title=p.title, slug=p.slug) for p in trending_rows],
+        daily_views_7_days=daily_series,
     )
