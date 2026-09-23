@@ -1,7 +1,7 @@
 import math
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -10,7 +10,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.deps.pagination import PaginationParams
-from app.models import RefreshToken, User, UserRole
+from app.models import Media, PasswordResetToken, Post, RefreshToken, User, UserRole
 from app.schemas.user import UserUpdate
 from app.services import audit_service
 
@@ -134,3 +134,49 @@ async def _is_last_super_admin(db: AsyncSession, user: User) -> bool:
         )
     )
     return others == 0
+
+
+async def delete_user_permanently(db: AsyncSession, current_user: User, user_id: UUID) -> None:
+    if current_user.id == user_id:
+        raise ValidationException(
+            "You cannot delete your own account", code="SELF_DELETION"
+        )
+
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        raise NotFoundException("User not found", code="USER_NOT_FOUND")
+
+    if await _is_last_super_admin(db, user):
+        raise ValidationException(
+            "Cannot delete the last active super admin", code="LAST_SUPER_ADMIN"
+        )
+
+    # Reassign any authored posts to the current admin
+    await db.execute(
+        update(Post).where(Post.author_id == user.id).values(author_id=current_user.id)
+    )
+
+    # Reassign any uploaded media to the current admin
+    await db.execute(
+        update(Media).where(Media.uploader_id == user.id).values(uploader_id=current_user.id)
+    )
+
+    # Delete all authentication tokens
+    await db.execute(
+        delete(RefreshToken).where(RefreshToken.user_id == user.id)
+    )
+    await db.execute(
+        delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+    )
+
+    audit_service.record(
+        db,
+        current_user.id,
+        "user.delete_permanent",
+        "user",
+        user.id,
+        {"deleted_name": user.name, "deleted_email": user.email},
+    )
+
+    await db.delete(user)
+    await db.commit()

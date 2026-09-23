@@ -53,10 +53,24 @@ async def update_user(
 
 
 @router.delete("/{user_id}")
-async def deactivate_user(
+async def delete_user(
+    user_id: UUID,
+    permanent: bool = False,
+    user: User = Depends(require_role(UserRole.super_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if permanent:
+        await user_service.delete_user_permanently(db, user, user_id)
+        return {"message": "User permanently deleted"}
+    await user_service.deactivate_user(db, user, user_id)
+    return {"message": "User deactivated"}
+
+
+@router.delete("/{user_id}/permanent")
+async def delete_user_permanently(
     user_id: UUID,
     user: User = Depends(require_role(UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await user_service.deactivate_user(db, user, user_id)
-    return {"message": "User deactivated"}
+    await user_service.delete_user_permanently(db, user, user_id)
+    return {"message": "User permanently deleted"}
