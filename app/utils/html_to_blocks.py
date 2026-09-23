@@ -36,6 +36,41 @@ INLINE_TAGS = set(MARK_TAGS) | {
 }
 CALLOUT_VARIANTS = {"info", "tip", "warning", "danger"}
 
+VIDEO_URL_PATTERN = re.compile(
+    r"^(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/|vimeo\.com/|player\.vimeo\.com/video/)[\w-]+",
+    re.IGNORECASE,
+)
+
+
+def extract_video_url(text: str, runs: list) -> str | None:
+    trimmed = (text or "").strip()
+    if not trimmed:
+        return None
+
+    if " " not in trimmed and "\n" not in trimmed and VIDEO_URL_PATTERN.match(trimmed):
+        if not trimmed.startswith("http"):
+            trimmed = "https://" + trimmed
+        elif trimmed.startswith("http://"):
+            trimmed = "https://" + trimmed[7:]
+        return trimmed
+
+    if runs:
+        meaningful_runs = [r for r in runs if (r.get("text") or "").strip()]
+        if len(meaningful_runs) == 1:
+            r = meaningful_runs[0]
+            run_text = (r.get("text") or "").strip()
+            for mark in r.get("marks") or []:
+                if mark.get("type") == "link":
+                    href = (mark.get("href") or "").strip()
+                    if VIDEO_URL_PATTERN.match(href) and (href == run_text or VIDEO_URL_PATTERN.match(run_text)):
+                        if not href.startswith("http"):
+                            href = "https://" + href
+                        elif href.startswith("http://"):
+                            href = "https://" + href[7:]
+                        return href
+
+    return None
+
 
 def collect_runs(node, marks):
     if isinstance(node, NavigableString):
@@ -159,6 +194,10 @@ def convert(html):
     def emit_paragraph(runs):
         text = runs_text(runs)
         if not text:
+            return
+        video_url = extract_video_url(text, runs)
+        if video_url:
+            blocks.append({"type": "embed", "url": video_url})
             return
         blocks.append({"type": "paragraph", "text": text, "content": runs})
 
@@ -298,10 +337,25 @@ def convert(html):
                     if block:
                         blocks.append(block)
                 else:
-                    blocks.append({"type": "html", "html": sanitize_html(str(child))})
+                    iframe = child.find("iframe")
+                    iframe_src = (iframe.get("src") or "").strip() if iframe else ""
+                    video_url = extract_video_url(child.get_text(), []) or (iframe_src if VIDEO_URL_PATTERN.match(iframe_src) else None)
+                    if video_url:
+                        embed_block = {"type": "embed", "url": video_url}
+                        if caption:
+                            cap = caption.get_text().strip()
+                            if cap:
+                                embed_block["caption"] = cap
+                        blocks.append(embed_block)
+                    else:
+                        blocks.append({"type": "html", "html": sanitize_html(str(child))})
 
             elif name == "iframe":
-                blocks.append({"type": "html", "html": sanitize_html(str(child))})
+                src = (child.get("src") or "").strip()
+                if VIDEO_URL_PATTERN.match(src):
+                    blocks.append({"type": "embed", "url": src})
+                else:
+                    blocks.append({"type": "html", "html": sanitize_html(str(child))})
 
             elif name == "hr":
                 blocks.append({"type": "hr"})
@@ -317,6 +371,15 @@ def convert(html):
                         "href": href,
                         "variant": btn.get("data-variant") or "primary",
                     })
+                elif child.get("data-embed") is not None:
+                    url = (child.get("data-url") or "").strip()
+                    if url and VIDEO_URL_PATTERN.match(url):
+                        caption = (child.get("data-caption") or "").strip()
+                        embed_block = {"type": "embed", "url": url}
+                        if caption:
+                            embed_block["caption"] = caption
+                        blocks.append(embed_block)
+                        continue
                 elif child.get("data-callout") is not None:
                     runs, images = _callout_parts(child)
                     text = runs_text(runs)
@@ -390,6 +453,8 @@ def is_broken(content_json):
         if block.get("type") == "paragraph":
             text = (block.get("text") or "").strip()
             if not text and not block.get("content"):
+                return True
+            if extract_video_url(text, block.get("content") or []):
                 return True
         if block.get("type") == "html" and len(block.get("html") or "") < 60:
             return True
