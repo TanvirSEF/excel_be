@@ -71,8 +71,12 @@ async def build_sitemap() -> str:
         add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
     track_categories = set(TRACK_MODULES.get("google-sheets", []))
     for post in posts:
-        url = LESSON_URL if (post.category and post.category.slug in track_categories) else POST_URL
-        add_url(base + url.format(slug=post.slug), post.updated_at)
+        if post.canonical_url:
+            post_path = post.canonical_url if post.canonical_url.startswith("/") else f"/{post.canonical_url}"
+            add_url(base + post_path, post.updated_at)
+        else:
+            url = LESSON_URL if (post.category and post.category.slug in track_categories) else POST_URL
+            add_url(base + url.format(slug=post.slug), post.updated_at)
 
     return ET.tostring(urlset, encoding="unicode", xml_declaration=True)
 
