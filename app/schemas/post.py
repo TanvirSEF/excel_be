@@ -183,6 +183,7 @@ class PostListItem(BaseModel):
     title: str
     slug: str
     excerpt: str | None
+    meta_description: str | None = None
     featured_image_url: str | None
     reading_time_minutes: int | None
     is_trending: bool
