@@ -89,4 +89,19 @@ async def invalidate_sitemap() -> None:
 
 
 async def find_redirect(db: AsyncSession, old_path: str) -> Redirect | None:
-    return await db.scalar(select(Redirect).where(Redirect.old_path == old_path.lstrip("/")))
+    clean = old_path.strip("/")
+    redirect = await db.scalar(select(Redirect).where(Redirect.old_path == clean))
+    if redirect is not None:
+        return redirect
+
+    post = await db.scalar(
+        select(Post).where(
+            (Post.canonical_url == f"/{clean}") | (Post.canonical_url == clean),
+            Post.status == PostStatus.published,
+            Post.deleted_at.is_(None),
+        )
+    )
+    if post is not None:
+        return Redirect(old_path=clean, new_path=f"/blog/{post.slug}", redirect_type=301)
+
+    return None

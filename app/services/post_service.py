@@ -207,7 +207,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         meta_title=data.meta_title,
         meta_description=data.meta_description,
         focus_keyphrase=data.focus_keyphrase,
-        canonical_url=data.canonical_url,
+        canonical_url=data.canonical_url or f"/{slug}",
         og_image_url=data.og_image_url,
         schema_type=data.schema_type or "TechArticle",
     )
