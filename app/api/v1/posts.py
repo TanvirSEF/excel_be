@@ -47,10 +47,15 @@ async def list_public(
 async def admin_list(
     pagination: PaginationParams = Depends(),
     status: PostStatus | None = Query(None),
+    category_id: UUID | None = Query(None),
+    author_id: UUID | None = Query(None),
+    search: str | None = Query(None),
     user: User = Depends(require_role(*WRITERS)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    return await post_service.admin_list(db, user, pagination, status)
+    return await post_service.admin_list(
+        db, user, pagination, status, category_id, author_id, search
+    )
 
 
 @router.get("/{post_id:uuid}", response_model=PostDetail)

@@ -132,13 +132,26 @@ async def admin_list(
     user: User,
     pagination: PaginationParams,
     status: PostStatus | None = None,
+    category_id: UUID | None = None,
+    author_id: UUID | None = None,
+    search: str | None = None,
 ) -> dict:
     conditions = [Post.deleted_at.is_(None)]
 
     if user.role == UserRole.technical_writer:
         conditions.append(Post.author_id == user.id)
+    elif author_id is not None:
+        conditions.append(Post.author_id == author_id)
+
     if status is not None:
         conditions.append(Post.status == status)
+
+    if category_id is not None:
+        conditions.append(Post.category_id == category_id)
+
+    if search and search.strip():
+        search_pattern = f"%{search.strip()}%"
+        conditions.append(Post.title.ilike(search_pattern))
 
     total = await db.scalar(select(func.count()).select_from(Post).where(*conditions))
     rows = (
