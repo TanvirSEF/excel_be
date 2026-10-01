@@ -81,7 +81,11 @@ def rate_limit(name: str, spec: str) -> Callable[..., Awaitable[None]]:
 
 
 def login_rate_limit() -> Callable[..., Awaitable[None]]:
-    return rate_limit("login", settings.rate_limit_login)
+    # Temporarily disabled
+    async def disabled(request: Request) -> None:
+        pass
+
+    return disabled
 
 
 def comment_rate_limit() -> Callable[..., Awaitable[None]]:
