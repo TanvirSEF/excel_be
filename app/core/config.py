@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     resend_api_key: str = ""
     resend_segment_id: str = ""
+    discord_webhook_url: str = ""
     email_from: str = "Excel Insider <no-reply@excelinsider.com>"
     frontend_url: str = "http://localhost:3000"
 
