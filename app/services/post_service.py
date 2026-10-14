@@ -220,7 +220,13 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
         meta_title=data.meta_title,
         meta_description=data.meta_description,
         focus_keyphrase=data.focus_keyphrase,
-        canonical_url=data.canonical_url or f"/{slug}",
+        canonical_url=(
+            (
+                (f"/{data.canonical_url.strip().strip('/')}/")
+                if data.canonical_url and data.canonical_url.strip()
+                else f"/{slug}/"
+            )
+        ),
         og_image_url=data.og_image_url,
         schema_type=data.schema_type or "TechArticle",
     )
@@ -425,11 +431,15 @@ async def update_seo(db: AsyncSession, post_id: UUID, data: SeoUpdate) -> PostDe
     post = await _get_or_404(db, post_id)
 
     for field in data.model_fields_set:
-        setattr(post, field, getattr(data, field))
+        val = getattr(data, field)
+        if field == "canonical_url" and val and isinstance(val, str) and val.strip():
+            val = f"/{val.strip().strip('/')}/"
+        setattr(post, field, val)
 
     await db.commit()
     await db.refresh(post)
     await cache_service.delete_keys(cache_service.post_detail_key(post.slug))
+    await seo_service.invalidate_sitemap()
     return await _to_detail(db, post)
 
 

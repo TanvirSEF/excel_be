@@ -15,10 +15,80 @@ logger = logging.getLogger(__name__)
 SITEMAP_KEY = "seo:sitemap"
 SITEMAP_TTL = 6 * 3600
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
-POST_URL = "/blog/{slug}"
-LESSON_URL = "/google-sheets/{slug}"
-CATEGORY_URL = "/blog/category/{slug}"
-SERIES_URL = "/series/{slug}"
+POST_URL = "/blog/{slug}/"
+LESSON_URL = "/google-sheets/{slug}/"
+CATEGORY_URL = "/category/{slug}/"
+SERIES_URL = "/series/{slug}/"
+
+STATIC_PAGES = [
+    "/",
+    "/about/",
+    "/about/nehad-ulfat/",
+    "/contact/",
+    "/google-sheets/",
+    "/category/",
+    "/spreadsheet-solutions/",
+    "/custom-templates/",
+    "/custom-tools/",
+    "/privacy/",
+    "/terms/",
+    "/cookie-policy/",
+]
+
+CALCULATOR_PAGES = [
+    "/calculator/",
+    "/calculator/accounting/",
+    "/calculator/finance/",
+    "/calculator/statistics/",
+    # Accounting calculators (15)
+    "/calculator/accounting/retail-profit-margin/",
+    "/calculator/accounting/wholesale-margin/",
+    "/calculator/accounting/reverse-margin/",
+    "/calculator/accounting/amazon-seller-commission/",
+    "/calculator/accounting/salesperson-profitability/",
+    "/calculator/accounting/payroll-with-overtime/",
+    "/calculator/accounting/gross-up-payroll/",
+    "/calculator/accounting/prorated-bonus/",
+    "/calculator/accounting/sales-commission/",
+    "/calculator/accounting/payroll-conversion/",
+    "/calculator/accounting/retained-earnings/",
+    "/calculator/accounting/cash-conversion-cycle/",
+    "/calculator/accounting/debt-payoff-with-extra-payments/",
+    "/calculator/accounting/debt-snowball-vs-avalanche/",
+    "/calculator/accounting/marginal-propensity-to-consume/",
+    # Finance calculators (17)
+    "/calculator/finance/share-profit/",
+    "/calculator/finance/dividend-reinvestment-plan/",
+    "/calculator/finance/dividend-snowball/",
+    "/calculator/finance/living-off-dividends/",
+    "/calculator/finance/cost-of-equity/",
+    "/calculator/finance/rental-property-roi/",
+    "/calculator/finance/cash-on-cash-roi/",
+    "/calculator/finance/solar-roi/",
+    "/calculator/finance/marketing-roi/",
+    "/calculator/finance/enterprise-seo-roi/",
+    "/calculator/finance/b2b-roi/",
+    "/calculator/finance/venture-capital/",
+    "/calculator/finance/internal-rate-of-return/",
+    "/calculator/finance/accounting-rate-of-return/",
+    "/calculator/finance/holding-period-return/",
+    "/calculator/finance/retirement-rate-of-return/",
+    "/calculator/finance/savings-withdrawal/",
+    # Statistics calculators (13)
+    "/calculator/statistics/weighted-average-grade/",
+    "/calculator/statistics/geometric-mean/",
+    "/calculator/statistics/harmonic-mean/",
+    "/calculator/statistics/interquartile-range/",
+    "/calculator/statistics/coefficient-of-variation/",
+    "/calculator/statistics/pooled-variance/",
+    "/calculator/statistics/sample-size/",
+    "/calculator/statistics/margin-of-error/",
+    "/calculator/statistics/z-score-to-percentile/",
+    "/calculator/statistics/p-value-from-z-score/",
+    "/calculator/statistics/critical-z-value/",
+    "/calculator/statistics/weighted-average-overtime/",
+    "/calculator/statistics/volume-weighted-average-price/",
+]
 
 
 async def get_sitemap() -> str:
@@ -64,15 +134,30 @@ async def build_sitemap() -> str:
             ET.SubElement(url, f"{{{SITEMAP_NS}}}lastmod").text = lastmod.date().isoformat()
 
     base = settings.frontend_url.rstrip("/")
-    add_url(base + "/")
+
+    # Static hub and core service pages
+    for path in STATIC_PAGES:
+        add_url(base + path)
+
+    # Calculators
+    for path in CALCULATOR_PAGES:
+        add_url(base + path)
+
+    # Categories
     for category in categories:
         add_url(base + CATEGORY_URL.format(slug=category.slug), category.updated_at)
+
+    # Series
     for series in series_rows:
         add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
+
+    # Posts & Lessons
     track_categories = set(TRACK_MODULES.get("google-sheets", []))
     for post in posts:
         if post.canonical_url:
             post_path = post.canonical_url if post.canonical_url.startswith("/") else f"/{post.canonical_url}"
+            if not post_path.endswith("/"):
+                post_path = f"{post_path}/"
             add_url(base + post_path, post.updated_at)
         else:
             url = LESSON_URL if (post.category and post.category.slug in track_categories) else POST_URL
@@ -92,16 +177,29 @@ async def find_redirect(db: AsyncSession, old_path: str) -> Redirect | None:
     clean = old_path.strip("/")
     redirect = await db.scalar(select(Redirect).where(Redirect.old_path == clean))
     if redirect is not None:
+        new_path = redirect.new_path
+        if new_path.startswith("/calculators"):
+            new_path = new_path.replace("/calculators", "/calculator", 1)
+        if not new_path.endswith("/") and "?" not in new_path:
+            new_path = f"{new_path}/"
+        redirect.new_path = new_path
         return redirect
 
     post = await db.scalar(
         select(Post).where(
-            (Post.canonical_url == f"/{clean}") | (Post.canonical_url == clean),
+            (Post.canonical_url == f"/{clean}")
+            | (Post.canonical_url == clean)
+            | (Post.canonical_url == f"/{clean}/"),
             Post.status == PostStatus.published,
             Post.deleted_at.is_(None),
         )
     )
     if post is not None:
-        return Redirect(old_path=clean, new_path=f"/blog/{post.slug}", redirect_type=301)
+        track_categories = set(TRACK_MODULES.get("google-sheets", []))
+        if post.category and post.category.slug in track_categories:
+            target_path = f"/google-sheets/{post.slug}/"
+        else:
+            target_path = f"/blog/{post.slug}/"
+        return Redirect(old_path=clean, new_path=target_path, redirect_type=301)
 
     return None
