@@ -9,8 +9,11 @@ router = APIRouter(tags=["seo"])
 
 
 @router.get("/sitemap.xml")
-async def sitemap() -> Response:
-    xml = await seo_service.get_sitemap()
+async def sitemap(refresh: bool = False) -> Response:
+    if refresh:
+        xml = await seo_service.rebuild_sitemap()
+    else:
+        xml = await seo_service.get_sitemap()
     return Response(
         content=xml,
         media_type="application/xml",

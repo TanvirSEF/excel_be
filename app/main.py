@@ -21,6 +21,11 @@ from app.jobs.scheduler import build_scheduler
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     scheduler = build_scheduler()
     scheduler.start()
+    try:
+        from app.services.seo_service import invalidate_sitemap
+        await invalidate_sitemap()
+    except Exception:
+        pass
     yield
     scheduler.shutdown(wait=False)
     await close_redis()
