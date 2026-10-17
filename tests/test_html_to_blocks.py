@@ -194,3 +194,32 @@ def test_unclosed_wpsm_titlebox():
     assert "Takeaway bullet 1" in callouts[0]["text"]
 
 
+def test_span_wrapped_numbered_heading():
+    html = "<span><h2>1. Print Excel Sheet with Rows and Columns</h2></span>"
+    doc = convert(html)
+    headings = blocks_of_type(doc, "heading")
+    assert len(headings) == 1
+    assert headings[0]["num"] == "1"
+    assert headings[0]["text"] == "Print Excel Sheet with Rows and Columns"
+    assert headings[0]["level"] == 2
+
+
+def test_span_wrapped_callout():
+    html = '<span><div data-callout="" data-variant="info" data-title="Key Takeaways"><strong>Important</strong> takeaway</div></span>'
+    doc = convert(html)
+    callouts = blocks_of_type(doc, "callout")
+    assert len(callouts) == 1
+    assert callouts[0]["title"] == "Key Takeaways"
+    assert callouts[0]["variant"] == "info"
+    assert "Important takeaway" in callouts[0]["text"]
+
+
+def test_span_wrapped_download_button():
+    html = '<span><div class="py-2"><a href="https://example.com/file.xlsx" data-button="" data-variant="primary">Download Practice Workbook</a></div></span>'
+    doc = convert(html)
+    buttons = blocks_of_type(doc, "button")
+    assert len(buttons) == 1
+    assert buttons[0]["label"] == "Download Practice Workbook"
+    assert buttons[0]["href"] == "https://example.com/file.xlsx"
+
+

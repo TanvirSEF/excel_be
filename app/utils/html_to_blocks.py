@@ -109,8 +109,10 @@ def runs_text(runs):
 
 
 def has_block_child(el):
+    if not isinstance(el, Tag):
+        return False
     return any(
-        isinstance(c, Tag) and c.name in BLOCK_TAGS
+        isinstance(c, Tag) and (c.name in BLOCK_TAGS or has_block_child(c))
         for c in el.children
     )
 
@@ -235,17 +237,28 @@ def convert(html):
     def walk(node):
         pending = []
         for child in node.children:
-            if isinstance(child, (NavigableString, Tag)) and (
-                isinstance(child, NavigableString) or (child.name in INLINE_TAGS and not child.find("img"))
-            ):
+            is_inline = isinstance(child, NavigableString) or (
+                isinstance(child, Tag)
+                and child.name in INLINE_TAGS
+                and not has_block_child(child)
+                and not child.find("img")
+            )
+            if is_inline:
                 pending.append(child)
                 continue
+
             flush_pending(pending)
             pending = []
+
             if not isinstance(child, Tag):
                 continue
 
             name = child.name
+
+            if name in INLINE_TAGS and has_block_child(child):
+                walk(child)
+                continue
+
             if name in HEADING_LEVELS:
                 runs = collect_runs(child, [])
                 text = runs_text(runs)
@@ -269,12 +282,8 @@ def convert(html):
                     blocks.append(block)
 
             elif name == "p":
-                non_inline = [
-                    c for c in child.children
-                    if isinstance(c, Tag) and c.name in BLOCK_TAGS - {"img", "br"}
-                ]
-                if non_inline:
-                    blocks.append({"type": "html", "html": sanitize_html(str(child))})
+                if has_block_child(child):
+                    walk(child)
                     continue
                 for img in child.find_all("img"):
                     block = image_block(img)
