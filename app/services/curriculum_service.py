@@ -46,6 +46,7 @@ async def get_curriculum(db: AsyncSession, track: str) -> list[dict]:
             select(Post.series_id, Post.slug, Post.title, Post.reading_time_minutes)
             .where(
                 Post.series_id.in_([s.id for s in series_rows]),
+                Post.canonical_url.like("/google-sheets/%"),
                 Post.status == PostStatus.published,
                 Post.deleted_at.is_(None),
             )

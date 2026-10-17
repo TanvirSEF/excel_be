@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
 from app.models import Category, Post, PostStatus, Redirect, Series, User
-from app.services.curriculum_service import TRACK_MODULES
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +170,6 @@ async def build_sitemap() -> str:
         add_url(base + AUTHOR_URL.format(slug=author.slug), author.updated_at)
 
     # Posts & Lessons
-    track_categories = set(TRACK_MODULES.get("google-sheets", []))
     for post in posts:
         if post.canonical_url:
             post_path = post.canonical_url if post.canonical_url.startswith("/") else f"/{post.canonical_url}"
@@ -179,7 +177,7 @@ async def build_sitemap() -> str:
                 post_path = f"{post_path}/"
             add_url(base + post_path, post.updated_at)
         else:
-            url = LESSON_URL if (post.category and post.category.slug in track_categories) else POST_URL
+            url = LESSON_URL if (post.canonical_url and post.canonical_url.startswith("/google-sheets/")) else POST_URL
             add_url(base + url.format(slug=post.slug), post.updated_at)
 
     return ET.tostring(urlset, encoding="unicode", xml_declaration=True)
@@ -214,8 +212,7 @@ async def find_redirect(db: AsyncSession, old_path: str) -> Redirect | None:
         )
     )
     if post is not None:
-        track_categories = set(TRACK_MODULES.get("google-sheets", []))
-        if post.category and post.category.slug in track_categories:
+        if post.canonical_url and post.canonical_url.startswith("/google-sheets/"):
             target_path = f"/google-sheets/{post.slug}/"
         else:
             target_path = f"/blog/{post.slug}/"
