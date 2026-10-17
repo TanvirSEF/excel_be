@@ -18,7 +18,6 @@ SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 POST_URL = "/blog/{slug}/"
 LESSON_URL = "/google-sheets/{slug}/"
 CATEGORY_URL = "/category/{slug}/"
-SERIES_URL = "/series/{slug}/"
 AUTHOR_URL = "/author/{slug}/"
 
 STATIC_PAGES = [
@@ -162,9 +161,10 @@ async def build_sitemap() -> str:
     for category in categories:
         add_url(base + CATEGORY_URL.format(slug=category.slug), category.updated_at)
 
-    # Series
+    # Topics / Series (/<category>/<topic>/)
     for series in series_rows:
-        add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
+        cat_slug = series.category.slug if series.category else "category"
+        add_url(f"{base}/{cat_slug}/{series.slug}/", series.updated_at)
 
     # Authors
     for author in authors:
