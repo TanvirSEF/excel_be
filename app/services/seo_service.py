@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
-from app.models import Category, Post, PostStatus, Redirect, Series
+from app.models import Category, Post, PostStatus, Redirect, Series, User
 from app.services.curriculum_service import TRACK_MODULES
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ POST_URL = "/blog/{slug}/"
 LESSON_URL = "/google-sheets/{slug}/"
 CATEGORY_URL = "/category/{slug}/"
 SERIES_URL = "/series/{slug}/"
+AUTHOR_URL = "/author/{slug}/"
 
 STATIC_PAGES = [
     "/",
@@ -123,6 +124,20 @@ async def build_sitemap() -> str:
         ).all()
         categories = (await session.scalars(select(Category).order_by(Category.slug))).all()
         series_rows = (await session.scalars(select(Series).order_by(Series.slug))).all()
+        authors = (
+            await session.scalars(
+                select(User)
+                .join(Post, Post.author_id == User.id)
+                .where(
+                    User.is_active.is_(True),
+                    User.slug.isnot(None),
+                    Post.status == PostStatus.published,
+                    Post.deleted_at.is_(None),
+                )
+                .distinct()
+                .order_by(User.slug)
+            )
+        ).all()
 
     ET.register_namespace("", SITEMAP_NS)
     urlset = ET.Element(f"{{{SITEMAP_NS}}}urlset")
@@ -150,6 +165,10 @@ async def build_sitemap() -> str:
     # Series
     for series in series_rows:
         add_url(base + SERIES_URL.format(slug=series.slug), series.updated_at)
+
+    # Authors
+    for author in authors:
+        add_url(base + AUTHOR_URL.format(slug=author.slug), author.updated_at)
 
     # Posts & Lessons
     track_categories = set(TRACK_MODULES.get("google-sheets", []))

@@ -496,13 +496,14 @@ async def _page(
 
 
 async def _to_detail(db: AsyncSession, post: Post) -> PostDetail:
-    author_name = await db.scalar(select(User.name).where(User.id == post.author_id))
+    author_row = (await db.execute(select(User.name, User.slug).where(User.id == post.author_id))).first()
     category = None
     if post.category_id is not None:
         category = await db.scalar(select(Category).where(Category.id == post.category_id))
 
     detail = PostDetail.model_validate(post)
-    detail.author_name = author_name
+    detail.author_name = author_row[0] if author_row else ""
+    detail.author_slug = author_row[1] if author_row else None
     detail.category_name = category.name if category else None
     detail.category_slug = category.slug if category else None
     detail.tags = await tag_service.post_tag_names(db, post.id)

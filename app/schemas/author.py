@@ -8,6 +8,7 @@ class AuthorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: uuid.UUID
+    slug: str | None = None
     name: str
     avatar_url: str | None = None
     bio: str | None = None

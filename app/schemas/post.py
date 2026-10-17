@@ -258,6 +258,7 @@ class PostDetail(BaseModel):
     status: PostStatus
     author_id: uuid.UUID
     author_name: str = ""
+    author_slug: str | None = None
     category_id: uuid.UUID | None = None
     category_name: str | None = None
     category_slug: str | None = None

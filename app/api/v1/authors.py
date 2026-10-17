@@ -13,19 +13,18 @@ from app.services import author_service
 router = APIRouter(prefix="/authors", tags=["authors"])
 
 
-@router.get("/{user_id}", response_model=AuthorOut)
+@router.get("/{identifier}", response_model=AuthorOut)
 async def get_author(
-    user_id: UUID,
+    identifier: str,
     db: AsyncSession = Depends(get_db),
 ) -> AuthorOut:
-    return await author_service.get_public_author(db, user_id)
+    return await author_service.get_public_author(db, identifier)
 
 
-@router.get("/{user_id}/posts", response_model=Page[PostListItem])
+@router.get("/{identifier}/posts", response_model=Page[PostListItem])
 async def list_author_posts(
-    user_id: UUID,
+    identifier: str,
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await author_service.get_public_author(db, user_id)
-    return await author_service.list_posts(db, user_id, pagination)
+    return await author_service.list_posts(db, identifier, pagination)
