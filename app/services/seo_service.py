@@ -29,8 +29,8 @@ STATIC_PAGES = [
     "/spreadsheet-solutions/",
     "/custom-templates/",
     "/custom-tools/",
-    "/privacy/",
-    "/terms/",
+    "/privacy-policy/",
+    "/terms-and-conditions/",
     "/cookie-policy/",
 ]
 
