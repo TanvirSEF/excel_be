@@ -16,7 +16,7 @@ SITEMAP_TTL = 6 * 3600
 SITEMAP_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 POST_URL = "/blog/{slug}/"
 LESSON_URL = "/google-sheets/{slug}/"
-CATEGORY_URL = "/category/{slug}/"
+CATEGORY_URL = "/{slug}/"
 AUTHOR_URL = "/author/{slug}/"
 
 STATIC_PAGES = [
