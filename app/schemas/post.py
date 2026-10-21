@@ -24,6 +24,7 @@ ALLOWED_BLOCK_TYPES = frozenset(
         "button",
         "embed",
         "accordion",
+        "interlink",
     }
 )
 ALLOWED_MARK_TYPES = frozenset(
@@ -150,6 +151,23 @@ def _validate_block(block: dict) -> None:
             raise ValueError("accordion blocks require a title of 1-300 characters")
         if "content" in block:
             _validate_rich(block.get("content"))
+
+
+    if block_type == "interlink":
+        url = block.get("url")
+        if not isinstance(url, str) or not SAFE_HREF.match(url):
+            raise ValueError("interlink blocks require a safe url")
+        title = block.get("title")
+        if not isinstance(title, str) or not 1 <= len(title) <= 500:
+            raise ValueError("interlink blocks require a title of 1-500 characters")
+        prefix = block.get("prefix")
+        if prefix is not None and (not isinstance(prefix, str) or len(prefix) > 100):
+            raise ValueError("interlink prefix must be a string of at most 100 chars")
+        image_url = block.get("image_url")
+        if image_url is not None and (
+            not isinstance(image_url, str) or not SAFE_HREF.match(image_url)
+        ):
+            raise ValueError("interlink image_url must be a safe url")
 
 
 def _validate_content(value: dict | None) -> dict | None:
@@ -291,6 +309,7 @@ class PostAdminItem(BaseModel):
     category_name: str | None = None
     is_trending: bool = False
     is_trending_pinned: bool = False
+    featured_image_url: str | None = None
     rejection_reason: str | None = None
     updated_at: datetime
     published_at: datetime | None = None

@@ -717,6 +717,19 @@ def _render_html(content_json: dict) -> str:
             rendered.append(
                 f"<details><summary>{title}</summary><p>{runs_html}</p></details>"
             )
+        elif block_type == "interlink":
+            prefix = html.escape(block.get("prefix") or "Read More")
+            title = html.escape(block.get("title", ""))
+            url = html.escape(block.get("url", ""), quote=True)
+            image_url = block.get("image_url")
+            img_tag = (
+                f'<img src="{html.escape(image_url, quote=True)}" alt="{title}" loading="lazy" />'
+                if image_url
+                else ""
+            )
+            rendered.append(
+                f'<p class="interlink">{img_tag}<strong>{prefix}:</strong> <a href="{url}">{title}</a></p>'
+            )
         else:
             rendered.append(f"<p>{runs_html}</p>")
     return sanitize_html("\n".join(rendered))
