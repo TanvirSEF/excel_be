@@ -290,4 +290,3 @@ async def traffic_feed(
         total_pages=total_pages,
         stats=stats,
     )
-    )
