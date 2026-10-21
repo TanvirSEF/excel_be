@@ -20,6 +20,7 @@ from app.api.v1 import (
     series,
     tags,
     track,
+    traffic_reports,
     users,
 )
 
@@ -40,6 +41,7 @@ api_router.include_router(media.router)
 api_router.include_router(search.router)
 api_router.include_router(analytics.router)
 api_router.include_router(track.router)
+api_router.include_router(traffic_reports.router)
 api_router.include_router(newsletter.router)
 api_router.include_router(audit.router)
 api_router.include_router(imports.router)

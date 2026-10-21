@@ -3,14 +3,14 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, delete, or_
 
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from app.models import AnalyticsSession, PasswordResetToken, PostView, RefreshToken
+from app.models import AnalyticsEvent, AnalyticsSession, PasswordResetToken, PostView, RefreshToken
 
 logger = logging.getLogger(__name__)
 
 REVOKED_RETENTION_DAYS = 7
 RAW_VIEWS_RETENTION_DAYS = 90
-ANALYTICS_RETENTION_DAYS = 400
 
 
 async def cleanup_expired_tokens() -> None:
@@ -54,11 +54,20 @@ async def prune_old_post_views() -> None:
 
 
 async def prune_old_analytics() -> None:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=ANALYTICS_RETENTION_DAYS)
+    now = datetime.now(timezone.utc)
+    session_cutoff = now - timedelta(days=settings.analytics_retention_days)
+    event_cutoff = now - timedelta(days=settings.analytics_event_retention_days)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(delete(AnalyticsSession).where(AnalyticsSession.started_at < cutoff))
+        events = await session.execute(delete(AnalyticsEvent).where(AnalyticsEvent.occurred_at < event_cutoff))
+        sessions = await session.execute(
+            delete(AnalyticsSession).where(AnalyticsSession.started_at < session_cutoff)
+        )
         await session.commit()
 
-    if result.rowcount:
-        logger.info("Pruned %d analytics sessions older than %d days", result.rowcount, ANALYTICS_RETENTION_DAYS)
+    if events.rowcount or sessions.rowcount:
+        logger.info(
+            "Pruned %d analytics events and %d sessions past their retention window",
+            events.rowcount,
+            sessions.rowcount,
+        )

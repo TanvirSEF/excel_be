@@ -1,6 +1,9 @@
+from datetime import datetime, timezone
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.jobs.analytics_flusher import flush_analytics
+from app.jobs.datacenter_refresher import refresh_datacenter_ranges
 from app.jobs.maintenance import cleanup_expired_tokens, prune_old_analytics, prune_old_post_views
 from app.jobs.newsletter_syncer import sync_newsletter_subscribers
 from app.jobs.scheduled_publisher import publish_scheduled_posts
@@ -16,6 +19,14 @@ def build_scheduler() -> AsyncIOScheduler:
     )
     scheduler.add_job(flush_view_counts, "interval", seconds=60, id="flush_view_counts")
     scheduler.add_job(flush_analytics, "interval", seconds=20, id="flush_analytics")
+    scheduler.add_job(
+        refresh_datacenter_ranges,
+        "cron",
+        day_of_week="mon",
+        hour=2,
+        id="refresh_datacenter_ranges",
+        next_run_time=datetime.now(timezone.utc),
+    )
     scheduler.add_job(publish_scheduled_posts, "interval", seconds=60, id="publish_scheduled_posts")
     scheduler.add_job(calculate_trending, "interval", minutes=30, id="calculate_trending")
     scheduler.add_job(regenerate_sitemap, "interval", hours=6, id="regenerate_sitemap")

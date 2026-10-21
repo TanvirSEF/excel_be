@@ -13,6 +13,7 @@ class AnalyticsSession(Base):
     __table_args__ = (
         Index("ix_analytics_sessions_started_at", "started_at"),
         Index("ix_analytics_sessions_visitor_id", "visitor_id"),
+        Index("ix_analytics_sessions_class_started_at", "traffic_class", "started_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -36,6 +37,12 @@ class AnalyticsSession(Base):
     interacted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     bot_score: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
     is_bot: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    ua_bot: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    traffic_class: Mapped[str] = mapped_column(String(16), default="unknown", server_default="unknown")
+    class_reason: Mapped[str | None] = mapped_column(String(120))
+    class_confidence: Mapped[str | None] = mapped_column(String(8))
+    exit_path: Mapped[str | None] = mapped_column(String(300))
 
 
 class AnalyticsPageview(Base):
@@ -54,3 +61,20 @@ class AnalyticsPageview(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     engaged_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     max_scroll: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("ix_analytics_events_session_id", "session_id"),
+        Index("ix_analytics_events_name_occurred_at", "name", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analytics_sessions.id", ondelete="CASCADE")
+    )
+    name: Mapped[str] = mapped_column(String(32))
+    path: Mapped[str] = mapped_column(String(300))
+    target: Mapped[str | None] = mapped_column(String(255))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

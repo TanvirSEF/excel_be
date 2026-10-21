@@ -28,6 +28,7 @@ def bot_score(
     screen_width: int | None = None,
     screen_height: int | None = None,
     burst: bool = False,
+    datacenter: bool = False,
 ) -> int:
     if is_bot(user_agent):
         return 100
@@ -40,4 +41,6 @@ def bot_score(
         score += 30
     if burst:
         score += 50
+    if datacenter:
+        score += 40
     return min(score, 100)

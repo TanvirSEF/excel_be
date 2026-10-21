@@ -8,19 +8,19 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
-from app.models import AnalyticsPageview, AnalyticsSession
+from app.models import AnalyticsEvent, AnalyticsPageview, AnalyticsSession
 from app.services.tracking_service import ANALYTICS_QUEUE
-from app.utils.bot_detect import BOT_THRESHOLD
+from app.utils.traffic_quality import EXCLUDED_CLASSES, classify_session
 
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 500
 MAX_EVENTS_PER_RUN = 100_000
-INTERACTION_SCORE_DISCOUNT = 30
 INT_MAX = 2_147_483_647
 
 sessions = AnalyticsSession.__table__
 pageviews = AnalyticsPageview.__table__
+custom_events = AnalyticsEvent.__table__
 
 
 async def flush_analytics() -> None:
@@ -41,11 +41,10 @@ async def flush_analytics() -> None:
 def _parse_event(raw: str) -> dict | None:
     try:
         event = json.loads(raw)
-        event["session_id"] = UUID(event["session_id"])
-        event["visitor_id"] = UUID(event["visitor_id"])
-        event["page_id"] = UUID(event["page_id"])
+        for key in ("event_id", "session_id", "visitor_id", "page_id"):
+            event[key] = UUID(event[key])
         event["occurred_at"] = datetime.fromisoformat(event["occurred_at"])
-        if event["type"] not in ("pageview", "ping"):
+        if event["type"] not in ("pageview", "ping", "event"):
             raise ValueError("unknown event type")
     except (ValueError, KeyError, TypeError):
         logger.warning("Dropping malformed analytics event")
@@ -62,17 +61,21 @@ async def _flush_batch(batch: list[str]) -> int:
     last_seen: dict[UUID, datetime] = {}
     page_progress: dict[UUID, dict] = {}
     interacted_sessions: set[UUID] = set()
+    internal_sessions: set[UUID] = set()
 
     for event in events:
         session_id = event["session_id"]
         last_seen[session_id] = max(last_seen.get(session_id, event["occurred_at"]), event["occurred_at"])
         if event["type"] == "pageview":
             first_pageview.setdefault(session_id, event)
-        progress = page_progress.setdefault(event["page_id"], {"engaged": 0, "scroll": 0})
-        progress["engaged"] = max(progress["engaged"], event["engaged_ms"])
-        progress["scroll"] = max(progress["scroll"], event["scroll"])
+        if event["type"] != "event":
+            progress = page_progress.setdefault(event["page_id"], {"engaged": 0, "scroll": 0})
+            progress["engaged"] = max(progress["engaged"], event["engaged_ms"])
+            progress["scroll"] = max(progress["scroll"], event["scroll"])
         if event["interacted"]:
             interacted_sessions.add(session_id)
+        if event["internal"]:
+            internal_sessions.add(session_id)
 
     async with AsyncSessionLocal() as db:
         if first_pageview:
@@ -98,6 +101,25 @@ async def _flush_batch(batch: list[str]) -> int:
                 .on_conflict_do_nothing(index_elements=["id"])
             )
 
+        known_sessions = set(
+            await db.scalars(select(sessions.c.id).where(sessions.c.id.in_(list(last_seen))))
+        )
+
+        custom_rows = [
+            {
+                "id": event["event_id"],
+                "session_id": event["session_id"],
+                "name": event["name"],
+                "path": event["path"],
+                "target": event["target"],
+                "occurred_at": event["occurred_at"],
+            }
+            for event in events
+            if event["type"] == "event" and event["session_id"] in known_sessions
+        ]
+        if custom_rows:
+            await db.execute(pg_insert(custom_events).values(custom_rows).on_conflict_do_nothing(index_elements=["id"]))
+
         await db.execute(
             update(pageviews)
             .where(pageviews.c.id == bindparam("target_page"))
@@ -115,34 +137,91 @@ async def _flush_batch(batch: list[str]) -> int:
             ],
         )
 
+        affected = list(known_sessions)
         await db.execute(
             update(sessions)
             .where(sessions.c.id == bindparam("target_session"))
             .values(last_seen_at=func.greatest(sessions.c.last_seen_at, bindparam("seen_at"))),
-            [{"target_session": sid, "seen_at": ts} for sid, ts in last_seen.items()],
+            [{"target_session": sid, "seen_at": ts} for sid, ts in last_seen.items() if sid in known_sessions],
         )
-        await db.execute(
-            update(sessions)
-            .where(sessions.c.id.in_(list(last_seen)))
-            .values(
-                engaged_ms=select(func.coalesce(func.sum(pageviews.c.engaged_ms), 0))
-                .where(pageviews.c.session_id == sessions.c.id)
-                .scalar_subquery(),
-                page_count=select(func.count())
-                .where(pageviews.c.session_id == sessions.c.id)
-                .scalar_subquery(),
-            )
-        )
-
         if interacted_sessions:
-            discounted = func.greatest(sessions.c.bot_score - INTERACTION_SCORE_DISCOUNT, 0)
             await db.execute(
-                update(sessions)
-                .where(sessions.c.id.in_(interacted_sessions), sessions.c.interacted.is_(False))
-                .values(interacted=True, bot_score=discounted, is_bot=discounted >= BOT_THRESHOLD)
+                update(sessions).where(sessions.c.id.in_(interacted_sessions)).values(interacted=True)
             )
+        if internal_sessions:
+            await db.execute(
+                update(sessions).where(sessions.c.id.in_(internal_sessions)).values(is_internal=True)
+            )
+
+        await _refresh_aggregates(db, affected)
         await db.commit()
     return len(events)
+
+
+async def _refresh_aggregates(db, session_ids: list[UUID]) -> None:
+    if not session_ids:
+        return
+
+    await db.execute(
+        update(sessions)
+        .where(sessions.c.id.in_(session_ids))
+        .values(
+            engaged_ms=select(func.coalesce(func.sum(pageviews.c.engaged_ms), 0))
+            .where(pageviews.c.session_id == sessions.c.id)
+            .scalar_subquery(),
+            page_count=select(func.count()).where(pageviews.c.session_id == sessions.c.id).scalar_subquery(),
+            exit_path=select(pageviews.c.path)
+            .where(pageviews.c.session_id == sessions.c.id)
+            .order_by(pageviews.c.occurred_at.desc())
+            .limit(1)
+            .scalar_subquery(),
+        )
+    )
+
+    rows = (
+        await db.execute(
+            select(
+                sessions.c.id,
+                sessions.c.ua_bot,
+                sessions.c.is_internal,
+                sessions.c.bot_score,
+                sessions.c.interacted,
+                sessions.c.engaged_ms,
+                sessions.c.page_count,
+            ).where(sessions.c.id.in_(session_ids))
+        )
+    ).all()
+    updates = []
+    for row in rows:
+        verdict = classify_session(
+            ua_bot=row.ua_bot,
+            internal=row.is_internal,
+            bot_score=row.bot_score,
+            interacted=row.interacted,
+            engaged_ms=row.engaged_ms,
+            page_count=row.page_count,
+        )
+        updates.append(
+            {
+                "target_session": row.id,
+                "cls": verdict.traffic_class,
+                "reason": verdict.reason,
+                "confidence": verdict.confidence,
+                "excluded": verdict.traffic_class in EXCLUDED_CLASSES,
+            }
+        )
+    if updates:
+        await db.execute(
+            update(sessions)
+            .where(sessions.c.id == bindparam("target_session"))
+            .values(
+                traffic_class=bindparam("cls"),
+                class_reason=bindparam("reason"),
+                class_confidence=bindparam("confidence"),
+                is_bot=bindparam("excluded"),
+            ),
+            updates,
+        )
 
 
 def _session_row(event: dict) -> dict:
@@ -164,5 +243,6 @@ def _session_row(event: dict) -> dict:
         "ip_hash": event["ip_hash"],
         "is_returning": event["returning"],
         "bot_score": event["bot_score"],
-        "is_bot": event["bot_score"] >= BOT_THRESHOLD,
+        "ua_bot": event["ua_bot"],
+        "is_internal": event["internal"],
     }
