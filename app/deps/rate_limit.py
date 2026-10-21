@@ -10,6 +10,7 @@ from fastapi import Request
 from app.core.config import settings
 from app.core.exceptions import TooManyRequestsException
 from app.core.redis_client import get_redis
+from app.deps.client_info import real_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +107,10 @@ def forgot_password_rate_limit() -> Callable[..., Awaitable[None]]:
 
 def reset_password_rate_limit() -> Callable[..., Awaitable[None]]:
     return rate_limit("reset-password", settings.rate_limit_reset_password)
+
+
+def view_rate_limit() -> Callable[..., Awaitable[None]]:
+    async def dependency(request: Request) -> None:
+        await enforce_rate_limit("view", real_client_ip(request) or "unknown", settings.rate_limit_view)
+
+    return dependency

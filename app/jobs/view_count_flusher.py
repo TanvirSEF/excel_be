@@ -10,7 +10,6 @@ from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
 from app.models import Post, PostView
 from app.services.view_service import VIEW_QUEUE
-from app.utils.geoip import resolve_geoip
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +50,6 @@ async def _flush_batch(batch: list) -> int:
         if not events:
             return 0
 
-        for event in events:
-            if not event.get("country") and event.get("ip_address"):
-                try:
-                    c, cc, city = await resolve_geoip(event["ip_address"])
-                    if c:
-                        event["country"] = c
-                    if cc:
-                        event["country_code"] = cc
-                    if city:
-                        event["city"] = city
-                except Exception:
-                    pass
-
         counts = Counter(event["post_id"] for event in events)
         await session.execute(insert(PostView).values(events))
         for post_id, count in counts.items():
@@ -85,7 +71,6 @@ def _parse_event(raw) -> dict | None:
     parsed = {"post_id": post_id}
     for field in (
         "ip_hash",
-        "ip_address",
         "country",
         "country_code",
         "city",

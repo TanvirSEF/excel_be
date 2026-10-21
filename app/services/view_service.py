@@ -12,6 +12,7 @@ from app.utils.user_agent import parse_user_agent
 logger = logging.getLogger(__name__)
 
 VIEW_QUEUE = "views:queue"
+DEDUPE_WINDOW_SECONDS = 1800
 BUFFER_TTL = 7 * 24 * 3600
 
 
@@ -29,8 +30,13 @@ async def register_view(
     referrer: str | None,
     country_code: str | None = None,
     city: str | None = None,
+    dedupe: bool = False,
 ) -> None:
     if is_bot(user_agent):
+        return
+
+    ip_hash = _hash_ip(ip)
+    if dedupe and ip_hash and not await _claim_view(post_id, ip_hash):
         return
 
     device_type, browser, os = parse_user_agent(user_agent)
@@ -38,8 +44,7 @@ async def register_view(
 
     event = {
         "post_id": post_id,
-        "ip_hash": _hash_ip(ip),
-        "ip_address": ip,
+        "ip_hash": ip_hash,
         "country": country_name,
         "country_code": country_code.strip().upper() if country_code else None,
         "city": city.strip() if city else None,
@@ -59,3 +64,13 @@ async def register_view(
             await pipe.execute()
     except Exception:
         logger.warning("Redis unavailable, view not counted for post %s", post_id)
+
+
+async def _claim_view(post_id: str, ip_hash: str) -> bool:
+    try:
+        claimed = await get_redis().set(
+            f"views:seen:{post_id}:{ip_hash}", "1", nx=True, ex=DEDUPE_WINDOW_SECONDS
+        )
+    except Exception:
+        return True
+    return bool(claimed)

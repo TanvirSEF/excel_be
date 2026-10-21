@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
 
     rate_limit_track: str = "120/1minute"
+    rate_limit_view: str = "60/1minute"
+    analytics_internal_ips: str = ""
+    analytics_retention_days: int = 400
+    analytics_event_retention_days: int = 90
 
     rate_limit_login: str = "5/15minutes"
     rate_limit_comment: str = "3/10minutes"
@@ -43,6 +47,10 @@ class Settings(BaseSettings):
     rate_limit_reset_password: str = "10/15minutes"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def internal_networks(self) -> list[str]:
+        return [item.strip() for item in self.analytics_internal_ips.split(",") if item.strip()]
 
     @property
     def cors_origins(self) -> list[str]:

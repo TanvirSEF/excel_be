@@ -88,23 +88,11 @@ async def list_public(
     return result
 
 
-async def get_by_slug(
-    db: AsyncSession,
-    slug: str,
-    user_agent: str | None = None,
-    ip: str | None = None,
-    referrer: str | None = None,
-    country_code: str | None = None,
-    city: str | None = None,
-) -> PostDetail:
+async def get_by_slug(db: AsyncSession, slug: str) -> PostDetail:
     detail_key = cache_service.post_detail_key(slug)
     cached = await cache_service.get_json(detail_key)
     if cached is not None:
-        detail = PostDetail.model_validate(cached)
-        await view_service.register_view(
-            str(detail.id), user_agent, ip, referrer, country_code, city
-        )
-        return detail
+        return PostDetail.model_validate(cached)
 
     post = await db.scalar(
         select(Post).where(
@@ -116,9 +104,6 @@ async def get_by_slug(
     if post is None:
         raise NotFoundException("Post not found", code="POST_NOT_FOUND")
 
-    await view_service.register_view(
-        str(post.id), user_agent, ip, referrer, country_code, city
-    )
     detail = await _to_detail(db, post)
     await cache_service.set_json(detail_key, detail.model_dump(mode="json"), cache_service.POST_TTL)
     return detail
@@ -139,7 +124,7 @@ async def record_view_by_slug(
         post_id = cached.get("id")
         if post_id:
             await view_service.register_view(
-                str(post_id), user_agent, ip, referrer, country_code, city
+                str(post_id), user_agent, ip, referrer, country_code, city, dedupe=True
             )
             return
 
@@ -152,7 +137,7 @@ async def record_view_by_slug(
     )
     if post_id is not None:
         await view_service.register_view(
-            str(post_id), user_agent, ip, referrer, country_code, city
+            str(post_id), user_agent, ip, referrer, country_code, city, dedupe=True
         )
 
 

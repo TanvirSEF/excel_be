@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncIterator
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -123,3 +124,24 @@ async def published_post(admin_token: str) -> AsyncIterator[Post]:
         await db.execute(delete(Post).where(Post.slug == "rate-limit-test-post"))
         await db.execute(delete(Category).where(Category.slug == "rate-limit-test"))
         await db.commit()
+
+
+@pytest.fixture
+async def isolated_analytics_redis(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[str]:
+    from app.jobs import analytics_flusher
+    from app.services import realtime_service, tracking_service, view_service
+
+    prefix = f"test:{uuid4().hex[:8]}:"
+    patched = {
+        tracking_service: ["ANALYTICS_QUEUE", "LIVE_VISITORS", "LIVE_VIEWS", "LIVE_RECENT", "LIVE_VISITOR_PREFIX"],
+        realtime_service: ["LIVE_VISITORS", "LIVE_VIEWS", "LIVE_RECENT", "LIVE_VISITOR_PREFIX"],
+        analytics_flusher: ["ANALYTICS_QUEUE"],
+        view_service: ["VIEW_QUEUE"],
+    }
+    for module, names in patched.items():
+        for name in names:
+            monkeypatch.setattr(module, name, prefix + getattr(module, name))
+
+    yield prefix
+
+    await _flush(f"{prefix}*")

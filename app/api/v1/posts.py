@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
+from app.deps.client_info import real_client_ip, require_allowed_origin
 from app.deps.pagination import PaginationParams
-from app.deps.rate_limit import comment_rate_limit
+from app.deps.rate_limit import comment_rate_limit, view_rate_limit
 from app.models import DownloadableAsset, PostStatus, User, UserRole
 from app.schemas.asset import AssetOut
 from app.schemas.common import Page
@@ -23,6 +24,7 @@ from app.schemas.post import (
     TrendingPinRequest,
 )
 from app.services import asset_service, comment_service, post_service
+from app.utils.geoip import resolve_geoip
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -68,41 +70,29 @@ async def get_by_id(
 
 
 @router.get("/{slug}", response_model=PostDetail)
-async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(get_db)) -> PostDetail:
-    return await post_service.get_by_slug(
-        db,
-        slug,
-        user_agent=request.headers.get("user-agent"),
-        ip=(
-            request.headers.get("cf-connecting-ip")
-            or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-            or request.headers.get("x-real-ip")
-            or (request.client.host if request.client else None)
-        ),
-        country_code=request.headers.get("cf-ipcountry"),
-        city=request.headers.get("cf-ipcity"),
-        referrer=request.headers.get("referer"),
-    )
+async def get_by_slug(slug: str, db: AsyncSession = Depends(get_db)) -> PostDetail:
+    return await post_service.get_by_slug(db, slug)
 
 
-@router.post("/{slug}/view", status_code=204)
+@router.post("/{slug}/view", status_code=204, dependencies=[Depends(require_allowed_origin), Depends(view_rate_limit())])
 async def record_view(
     slug: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    ip = real_client_ip(request)
+    country_code = request.headers.get("cf-ipcountry")
+    city = request.headers.get("cf-ipcity")
+    if not country_code:
+        _, country_code, city = await resolve_geoip(ip)
+
     await post_service.record_view_by_slug(
         db,
         slug,
         user_agent=request.headers.get("user-agent"),
-        ip=(
-            request.headers.get("cf-connecting-ip")
-            or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-            or request.headers.get("x-real-ip")
-            or (request.client.host if request.client else None)
-        ),
-        country_code=request.headers.get("cf-ipcountry"),
-        city=request.headers.get("cf-ipcity"),
+        ip=ip,
+        country_code=country_code,
+        city=city,
         referrer=request.headers.get("referer"),
     )
 
