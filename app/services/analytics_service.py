@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -13,6 +14,11 @@ from app.schemas.analytics import (
     ReferrerStat,
     TopPost,
     TrendingPost,
+)
+from app.schemas.traffic import (
+    LiveTrafficStats,
+    TrafficFeedResponse,
+    TrafficLogItem,
 )
 
 EDITORS = (UserRole.super_admin, UserRole.senior_editor)
@@ -167,4 +173,121 @@ async def overview(db: AsyncSession) -> OverviewAnalytics:
         ],
         trending=[TrendingPost(id=p.id, title=p.title, slug=p.slug) for p in trending_rows],
         daily_views_7_days=daily_series,
+    )
+
+
+async def traffic_feed(
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 25,
+    country_code: str | None = None,
+    device_type: str | None = None,
+    search: str | None = None,
+) -> TrafficFeedResponse:
+    now = datetime.now(timezone.utc)
+    thirty_mins_ago = now - timedelta(minutes=30)
+    today_start = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc)
+
+    conditions = [Post.deleted_at.is_(None)]
+    if country_code and country_code.strip():
+        conditions.append(PostView.country_code == country_code.strip().upper())
+    if device_type and device_type.strip():
+        conditions.append(PostView.device_type == device_type.strip().lower())
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        conditions.append(
+            Post.title.ilike(pattern) | PostView.ip_address.ilike(pattern) | PostView.city.ilike(pattern)
+        )
+
+    total = await db.scalar(
+        select(func.count())
+        .select_from(PostView)
+        .join(Post, PostView.post_id == Post.id)
+        .where(*conditions)
+    ) or 0
+
+    page = max(1, page)
+    page_size = max(5, min(page_size, 100))
+    offset = (page - 1) * page_size
+
+    rows = (
+        await db.execute(
+            select(PostView, Post.title, Post.slug)
+            .join(Post, PostView.post_id == Post.id)
+            .where(*conditions)
+            .order_by(PostView.viewed_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+    ).all()
+
+    items = [
+        TrafficLogItem(
+            id=pv.id,
+            viewed_at=pv.viewed_at,
+            post_id=pv.post_id,
+            post_title=title,
+            post_slug=slug,
+            ip_address=pv.ip_address,
+            country=pv.country,
+            country_code=pv.country_code,
+            city=pv.city,
+            device_type=pv.device_type,
+            browser=pv.browser,
+            os=pv.os,
+            referrer=pv.referrer,
+        )
+        for pv, title, slug in rows
+    ]
+
+    active_30m = await db.scalar(
+        select(func.count())
+        .select_from(PostView)
+        .where(PostView.viewed_at >= thirty_mins_ago)
+    ) or 0
+
+    today_views = await db.scalar(
+        select(func.count())
+        .select_from(PostView)
+        .where(PostView.viewed_at >= today_start)
+    ) or 0
+
+    top_country_row = (
+        await db.execute(
+            select(PostView.country, PostView.country_code, func.count())
+            .where(PostView.country.is_not(None), PostView.viewed_at >= today_start)
+            .group_by(PostView.country, PostView.country_code)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+
+    top_device_row = (
+        await db.execute(
+            select(PostView.device_type, func.count())
+            .where(PostView.device_type.is_not(None), PostView.viewed_at >= today_start)
+            .group_by(PostView.device_type)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+
+    stats = LiveTrafficStats(
+        active_30m=active_30m,
+        today_views=today_views,
+        top_country=top_country_row[0] if top_country_row else None,
+        top_country_code=top_country_row[1] if top_country_row else None,
+        top_device=top_device_row[0] if top_device_row else None,
+    )
+
+    total_pages = math.ceil(total / page_size) if total else 0
+
+    return TrafficFeedResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        stats=stats,
+    )
     )

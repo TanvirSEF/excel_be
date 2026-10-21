@@ -6,6 +6,8 @@ from hashlib import sha256
 from app.core.config import settings
 from app.core.redis_client import get_redis
 from app.utils.bot_detect import is_bot
+from app.utils.country_names import get_country_name
+from app.utils.user_agent import parse_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +23,29 @@ def _hash_ip(ip: str | None) -> str | None:
 
 
 async def register_view(
-    post_id: str, user_agent: str | None, ip: str | None, referrer: str | None
+    post_id: str,
+    user_agent: str | None,
+    ip: str | None,
+    referrer: str | None,
+    country_code: str | None = None,
+    city: str | None = None,
 ) -> None:
     if is_bot(user_agent):
         return
 
+    device_type, browser, os = parse_user_agent(user_agent)
+    country_name = get_country_name(country_code)
+
     event = {
         "post_id": post_id,
         "ip_hash": _hash_ip(ip),
+        "ip_address": ip,
+        "country": country_name,
+        "country_code": country_code.strip().upper() if country_code else None,
+        "city": city.strip() if city else None,
+        "device_type": device_type,
+        "browser": browser,
+        "os": os,
         "referrer": referrer,
         "user_agent": user_agent,
         "viewed_at": datetime.now(timezone.utc).isoformat(),

@@ -1,12 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
 from app.models import User
 from app.schemas.analytics import OverviewAnalytics, PostAnalytics
+from app.schemas.traffic import TrafficFeedResponse
 from app.services import analytics_service
 from app.services.analytics_service import ANALYTICS_VIEWERS
 
@@ -28,3 +29,23 @@ async def overview(
     db: AsyncSession = Depends(get_db),
 ) -> OverviewAnalytics:
     return await analytics_service.overview(db)
+
+
+@router.get("/traffic", response_model=TrafficFeedResponse)
+async def traffic_feed(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=5, le=100),
+    country_code: str | None = Query(None),
+    device_type: str | None = Query(None),
+    search: str | None = Query(None),
+    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    db: AsyncSession = Depends(get_db),
+) -> TrafficFeedResponse:
+    return await analytics_service.traffic_feed(
+        db,
+        page=page,
+        page_size=page_size,
+        country_code=country_code,
+        device_type=device_type,
+        search=search,
+    )

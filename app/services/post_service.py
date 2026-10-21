@@ -94,12 +94,16 @@ async def get_by_slug(
     user_agent: str | None = None,
     ip: str | None = None,
     referrer: str | None = None,
+    country_code: str | None = None,
+    city: str | None = None,
 ) -> PostDetail:
     detail_key = cache_service.post_detail_key(slug)
     cached = await cache_service.get_json(detail_key)
     if cached is not None:
         detail = PostDetail.model_validate(cached)
-        await view_service.register_view(str(detail.id), user_agent, ip, referrer)
+        await view_service.register_view(
+            str(detail.id), user_agent, ip, referrer, country_code, city
+        )
         return detail
 
     post = await db.scalar(
@@ -112,7 +116,9 @@ async def get_by_slug(
     if post is None:
         raise NotFoundException("Post not found", code="POST_NOT_FOUND")
 
-    await view_service.register_view(str(post.id), user_agent, ip, referrer)
+    await view_service.register_view(
+        str(post.id), user_agent, ip, referrer, country_code, city
+    )
     detail = await _to_detail(db, post)
     await cache_service.set_json(detail_key, detail.model_dump(mode="json"), cache_service.POST_TTL)
     return detail

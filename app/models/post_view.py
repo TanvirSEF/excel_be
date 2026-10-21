@@ -10,7 +10,11 @@ from app.models.base import Base
 
 class PostView(Base):
     __tablename__ = "post_views"
-    __table_args__ = (Index("ix_post_views_post_id_viewed_at", "post_id", "viewed_at"),)
+    __table_args__ = (
+        Index("ix_post_views_post_id_viewed_at", "post_id", "viewed_at"),
+        Index("ix_post_views_viewed_at", "viewed_at"),
+        Index("ix_post_views_country_code_viewed_at", "country_code", "viewed_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     post_id: Mapped[uuid.UUID] = mapped_column(
@@ -18,5 +22,12 @@ class PostView(Base):
     )
     viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ip_hash: Mapped[str | None] = mapped_column(String(64))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    country: Mapped[str | None] = mapped_column(String(64))
+    country_code: Mapped[str | None] = mapped_column(String(2))
+    city: Mapped[str | None] = mapped_column(String(100))
+    device_type: Mapped[str | None] = mapped_column(String(20))
+    browser: Mapped[str | None] = mapped_column(String(50))
+    os: Mapped[str | None] = mapped_column(String(50))
     referrer: Mapped[str | None] = mapped_column(Text)
     user_agent: Mapped[str | None] = mapped_column(Text)

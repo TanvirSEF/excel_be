@@ -69,7 +69,18 @@ def _parse_event(raw) -> dict | None:
         return None
 
     parsed = {"post_id": post_id}
-    for field in ("ip_hash", "referrer", "user_agent"):
+    for field in (
+        "ip_hash",
+        "ip_address",
+        "country",
+        "country_code",
+        "city",
+        "device_type",
+        "browser",
+        "os",
+        "referrer",
+        "user_agent",
+    ):
         value = event.get(field)
         parsed[field] = value if value else None
 

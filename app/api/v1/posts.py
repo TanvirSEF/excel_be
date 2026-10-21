@@ -73,7 +73,14 @@ async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(ge
         db,
         slug,
         user_agent=request.headers.get("user-agent"),
-        ip=request.client.host if request.client else None,
+        ip=(
+            request.headers.get("cf-connecting-ip")
+            or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            or request.headers.get("x-real-ip")
+            or (request.client.host if request.client else None)
+        ),
+        country_code=request.headers.get("cf-ipcountry"),
+        city=request.headers.get("cf-ipcity"),
         referrer=request.headers.get("referer"),
     )
 
