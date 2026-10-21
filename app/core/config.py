@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     r2_bucket_name: str = ""
     r2_public_url: str = ""
 
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+
     allowed_origins: str = "http://localhost:3000"
 
     rate_limit_login: str = "5/15minutes"

@@ -74,3 +74,5 @@ urllib3==2.7.0
 uvicorn==0.52.3
 watchfiles==1.2.0
 websockets==17.0.1
+
+openai>=1.50.0
