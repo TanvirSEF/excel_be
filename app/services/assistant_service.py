@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import re
+import uuid
 from typing import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis_client import get_redis
-from app.models import Post, PostStatus
+from app.models import AssistantQuery, Post, PostStatus
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,22 @@ async def stream_chat_response(
         if role in ("user", "assistant") and content:
             formatted_messages.append({"role": role, "content": str(content)[:600]})
 
+    # Log query record asynchronously to assistant_queries
+    query_id = uuid.uuid4()
+    try:
+        query_log = AssistantQuery(
+            id=query_id,
+            query_text=latest_user_message[:1000] if latest_user_message else "No message",
+            matched_articles_count=len(articles),
+            matched_calculators_count=len(calculators),
+            client_ip=client_ip[:45] if client_ip else None,
+        )
+        db.add(query_log)
+        await db.commit()
+    except Exception as log_err:
+        logger.warning("Failed to log assistant query: %s", log_err)
+        await db.rollback()
+
     try:
         client = AsyncOpenAI(api_key=api_key)
         response = await client.chat.completions.create(
@@ -232,7 +249,113 @@ async def stream_chat_response(
                 text = chunk.choices[0].delta.content
                 yield f"data: {json.dumps({'type': 'token', 'text': text})}\n\n"
 
-        yield f"data: {json.dumps({'type': 'done', 'articles': articles, 'calculators': calculators})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'query_id': str(query_id), 'articles': articles, 'calculators': calculators})}\n\n"
     except Exception as e:
         logger.exception("Error in assistant stream: %s", e)
         yield f"data: {json.dumps({'error': 'Sorry, the assistant encountered an error. Please try again shortly.'})}\n\n"
+
+
+async def record_query_feedback(
+    db: AsyncSession,
+    query_id: uuid.UUID,
+    rating: str,
+) -> bool:
+    try:
+        stmt = select(AssistantQuery).where(AssistantQuery.id == query_id)
+        result = await db.execute(stmt)
+        record = result.scalar_one_or_none()
+        if record:
+            record.user_feedback = rating
+            await db.commit()
+            return True
+        return False
+    except Exception as e:
+        logger.warning("Failed to record query feedback: %s", e)
+        await db.rollback()
+        return False
+
+
+async def get_assistant_analytics(db: AsyncSession) -> dict:
+    from datetime import datetime, timezone
+
+    now_utc = datetime.now(timezone.utc)
+    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Total queries
+    total_q_stmt = select(func.count(AssistantQuery.id))
+    total_queries = (await db.execute(total_q_stmt)).scalar() or 0
+
+    # Queries today
+    today_q_stmt = select(func.count(AssistantQuery.id)).where(AssistantQuery.created_at >= today_start)
+    queries_today = (await db.execute(today_q_stmt)).scalar() or 0
+
+    # Feedback counts
+    up_stmt = select(func.count(AssistantQuery.id)).where(AssistantQuery.user_feedback == "up")
+    thumbs_up = (await db.execute(up_stmt)).scalar() or 0
+
+    down_stmt = select(func.count(AssistantQuery.id)).where(AssistantQuery.user_feedback == "down")
+    thumbs_down = (await db.execute(down_stmt)).scalar() or 0
+
+    total_rated = thumbs_up + thumbs_down
+    satisfaction_rate = round((thumbs_up / total_rated) * 100, 1) if total_rated > 0 else 100.0
+
+    # Match rate (% where matched_articles_count > 0 or matched_calculators_count > 0)
+    matched_stmt = select(func.count(AssistantQuery.id)).where(
+        (AssistantQuery.matched_articles_count > 0) | (AssistantQuery.matched_calculators_count > 0)
+    )
+    matched_count = (await db.execute(matched_stmt)).scalar() or 0
+    match_rate = round((matched_count / total_queries) * 100, 1) if total_queries > 0 else 100.0
+
+    # Content Gaps: queries where matched_articles_count == 0
+    gaps_stmt = (
+        select(AssistantQuery.id, AssistantQuery.query_text, AssistantQuery.created_at)
+        .where(AssistantQuery.matched_articles_count == 0)
+        .order_by(AssistantQuery.created_at.desc())
+        .limit(30)
+    )
+    gap_rows = (await db.execute(gaps_stmt)).all()
+    content_gaps = [
+        {
+            "id": str(r.id),
+            "query_text": r.query_text,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in gap_rows
+    ]
+
+    # Recent queries (latest 50)
+    recent_stmt = (
+        select(
+            AssistantQuery.id,
+            AssistantQuery.query_text,
+            AssistantQuery.matched_articles_count,
+            AssistantQuery.matched_calculators_count,
+            AssistantQuery.user_feedback,
+            AssistantQuery.created_at,
+        )
+        .order_by(AssistantQuery.created_at.desc())
+        .limit(50)
+    )
+    recent_rows = (await db.execute(recent_stmt)).all()
+    recent_queries = [
+        {
+            "id": str(r.id),
+            "query_text": r.query_text,
+            "matched_articles_count": r.matched_articles_count,
+            "matched_calculators_count": r.matched_calculators_count,
+            "user_feedback": r.user_feedback,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in recent_rows
+    ]
+
+    return {
+        "total_queries": total_queries,
+        "queries_today": queries_today,
+        "satisfaction_rate": satisfaction_rate,
+        "match_rate": match_rate,
+        "thumbs_up": thumbs_up,
+        "thumbs_down": thumbs_down,
+        "content_gaps": content_gaps,
+        "recent_queries": recent_queries,
+    }

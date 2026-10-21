@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Request
+import uuid
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +19,11 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1, max_length=20)
+
+
+class FeedbackRequest(BaseModel):
+    query_id: uuid.UUID
+    rating: Literal["up", "down"]
 
 
 @router.post("/chat")
@@ -46,3 +54,18 @@ async def chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/feedback")
+async def record_feedback(
+    data: FeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    success = await assistant_service.record_query_feedback(
+        db=db,
+        query_id=data.query_id,
+        rating=data.rating,
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Query record not found")
+    return {"status": "ok", "message": "Feedback recorded successfully"}

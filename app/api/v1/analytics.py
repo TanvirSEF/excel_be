@@ -8,7 +8,7 @@ from app.deps.auth_deps import get_current_user, require_role
 from app.models import User
 from app.schemas.analytics import OverviewAnalytics, PostAnalytics
 from app.schemas.traffic import TrafficFeedResponse
-from app.services import analytics_service
+from app.services import analytics_service, assistant_service
 from app.services.analytics_service import ANALYTICS_VIEWERS
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -49,3 +49,12 @@ async def traffic_feed(
         device_type=device_type,
         search=search,
     )
+
+
+@router.get("/assistant")
+async def assistant_analytics(
+    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await assistant_service.get_assistant_analytics(db)
+
