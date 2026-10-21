@@ -5,7 +5,8 @@ BOT_PATTERN = re.compile(
     r"|slack|discord|telegram|whatsapp"
     r"|facebookexternalhit|twitterbot|linkedinbot|pinterest"
     r"|gptbot|claudebot|perplexity|ccbot|amazonbot|bytespider"
-    r"|curl|wget|python|urllib|axios|node-fetch|go-http-client|java/",
+    r"|curl|wget|python|urllib|axios|node-fetch|go-http-client|java/"
+    r"|excelinsider-web",
     re.IGNORECASE,
 )
 

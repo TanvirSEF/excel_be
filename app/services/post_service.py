@@ -124,6 +124,38 @@ async def get_by_slug(
     return detail
 
 
+async def record_view_by_slug(
+    db: AsyncSession,
+    slug: str,
+    user_agent: str | None = None,
+    ip: str | None = None,
+    referrer: str | None = None,
+    country_code: str | None = None,
+    city: str | None = None,
+) -> None:
+    detail_key = cache_service.post_detail_key(slug)
+    cached = await cache_service.get_json(detail_key)
+    if cached is not None:
+        post_id = cached.get("id")
+        if post_id:
+            await view_service.register_view(
+                str(post_id), user_agent, ip, referrer, country_code, city
+            )
+            return
+
+    post_id = await db.scalar(
+        select(Post.id).where(
+            Post.slug == slug,
+            Post.status == PostStatus.published,
+            Post.deleted_at.is_(None),
+        )
+    )
+    if post_id is not None:
+        await view_service.register_view(
+            str(post_id), user_agent, ip, referrer, country_code, city
+        )
+
+
 async def get_by_id(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 

@@ -85,6 +85,28 @@ async def get_by_slug(slug: str, request: Request, db: AsyncSession = Depends(ge
     )
 
 
+@router.post("/{slug}/view", status_code=204)
+async def record_view(
+    slug: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await post_service.record_view_by_slug(
+        db,
+        slug,
+        user_agent=request.headers.get("user-agent"),
+        ip=(
+            request.headers.get("cf-connecting-ip")
+            or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+            or request.headers.get("x-real-ip")
+            or (request.client.host if request.client else None)
+        ),
+        country_code=request.headers.get("cf-ipcountry"),
+        city=request.headers.get("cf-ipcity"),
+        referrer=request.headers.get("referer"),
+    )
+
+
 @router.get("/{post_id}/assets", response_model=list[AssetOut])
 async def list_assets(
     post_id: UUID,
