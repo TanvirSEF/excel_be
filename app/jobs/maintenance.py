@@ -4,12 +4,13 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, delete, or_
 
 from app.core.database import AsyncSessionLocal
-from app.models import PasswordResetToken, PostView, RefreshToken
+from app.models import AnalyticsSession, PasswordResetToken, PostView, RefreshToken
 
 logger = logging.getLogger(__name__)
 
 REVOKED_RETENTION_DAYS = 7
 RAW_VIEWS_RETENTION_DAYS = 90
+ANALYTICS_RETENTION_DAYS = 400
 
 
 async def cleanup_expired_tokens() -> None:
@@ -50,3 +51,14 @@ async def prune_old_post_views() -> None:
 
     if result.rowcount:
         logger.info("Pruned %d post views older than %d days", result.rowcount, RAW_VIEWS_RETENTION_DAYS)
+
+
+async def prune_old_analytics() -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=ANALYTICS_RETENTION_DAYS)
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(delete(AnalyticsSession).where(AnalyticsSession.started_at < cutoff))
+        await session.commit()
+
+    if result.rowcount:
+        logger.info("Pruned %d analytics sessions older than %d days", result.rowcount, ANALYTICS_RETENTION_DAYS)

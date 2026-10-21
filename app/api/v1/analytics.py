@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.deps.auth_deps import get_current_user, require_role
 from app.models import User
-from app.schemas.analytics import OverviewAnalytics, PostAnalytics
+from app.schemas.analytics import OverviewAnalytics, PostAnalytics, RealtimeAnalytics, TrafficOverview
 from app.schemas.traffic import TrafficFeedResponse
-from app.services import analytics_service, assistant_service
+from app.services import analytics_service, assistant_service, traffic_service
 from app.services.analytics_service import ANALYTICS_VIEWERS
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -58,3 +58,19 @@ async def assistant_analytics(
 ):
     return await assistant_service.get_assistant_analytics(db)
 
+
+@router.get("/realtime", response_model=RealtimeAnalytics)
+async def realtime(
+    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+) -> RealtimeAnalytics:
+    return await traffic_service.realtime()
+
+
+@router.get("/traffic-overview", response_model=TrafficOverview)
+async def traffic_overview(
+    days: int = Query(7, ge=1, le=90),
+    humans_only: bool = True,
+    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    db: AsyncSession = Depends(get_db),
+) -> TrafficOverview:
+    return await traffic_service.overview(db, days, humans_only)

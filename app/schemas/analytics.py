@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -47,3 +47,51 @@ class OverviewAnalytics(BaseModel):
     top_posts_7_days: list[TopPost]
     trending: list[TrendingPost]
     daily_views_7_days: list[DailyViews] = []
+
+
+class LabelCount(BaseModel):
+    label: str
+    count: int
+
+
+class MinuteViews(BaseModel):
+    minute: datetime
+    views: int
+
+
+class RealtimeAnalytics(BaseModel):
+    active_users: int
+    views_per_minute: list[MinuteViews]
+    top_pages: list[LabelCount]
+    top_sources: list[LabelCount]
+    countries: list[LabelCount]
+    devices: list[LabelCount]
+
+
+class TrafficDay(BaseModel):
+    date: date
+    users: int
+    sessions: int
+    pageviews: int
+
+
+class PageStat(BaseModel):
+    path: str
+    views: int
+    avg_engaged_seconds: float
+
+
+class TrafficOverview(BaseModel):
+    days: int
+    humans_only: bool
+    users: int
+    sessions: int
+    pageviews: int
+    avg_session_seconds: float
+    pages_per_session: float
+    engagement_rate: float
+    daily: list[TrafficDay]
+    top_pages: list[PageStat]
+    sources: list[LabelCount]
+    devices: list[LabelCount]
+    countries: list[LabelCount]
