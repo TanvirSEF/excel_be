@@ -14,6 +14,7 @@ from app.schemas.common import Page
 from app.schemas.comment import CommentCreate, CommentOut
 from app.schemas.post import (
     PostAdminItem,
+    PostStatusCounts,
     PostCreate,
     PostDetail,
     PostListItem,
@@ -57,6 +58,19 @@ async def admin_list(
 ) -> dict:
     return await post_service.admin_list(
         db, user, pagination, status, category_id, author_id, search
+    )
+
+
+@router.get("/admin/counts", response_model=PostStatusCounts)
+async def admin_counts(
+    category_id: UUID | None = Query(None),
+    author_id: UUID | None = Query(None),
+    search: str | None = Query(None),
+    user: User = Depends(require_role(*WRITERS)),
+    db: AsyncSession = Depends(get_db),
+) -> PostStatusCounts:
+    return await post_service.admin_counts(
+        db, user, category_id, author_id, search
     )
 
 

@@ -17,6 +17,7 @@ from app.deps.pagination import PaginationParams
 from app.models import Category, Post, PostStatus, PostTag, Series, Tag, User, UserRole
 from app.schemas.post import (
     PostAdminItem,
+    PostStatusCounts,
     PostCreate,
     PostDetail,
     PostListItem,
@@ -203,6 +204,54 @@ async def admin_list(
         "page_size": pagination.page_size,
         "total_pages": math.ceil(total / pagination.page_size) if total else 0,
     }
+
+
+async def admin_counts(
+    db: AsyncSession,
+    user: User,
+    category_id: UUID | None = None,
+    author_id: UUID | None = None,
+    search: str | None = None,
+) -> PostStatusCounts:
+    conditions = [Post.deleted_at.is_(None)]
+
+    if user.role == UserRole.technical_writer:
+        conditions.append(Post.author_id == user.id)
+    elif author_id is not None:
+        conditions.append(Post.author_id == author_id)
+
+    if category_id is not None:
+        conditions.append(Post.category_id == category_id)
+
+    if search and search.strip():
+        search_pattern = f"%{search.strip()}%"
+        conditions.append(Post.title.ilike(search_pattern))
+
+    rows = (
+        await db.execute(
+            select(Post.status, func.count())
+            .where(*conditions)
+            .group_by(Post.status)
+        )
+    ).all()
+
+    counts = {
+        "all": 0,
+        "draft": 0,
+        "pending_review": 0,
+        "published": 0,
+        "rejected": 0,
+        "scheduled": 0,
+    }
+    total = 0
+    for status_val, count_val in rows:
+        key = status_val.value if hasattr(status_val, "value") else str(status_val)
+        if key in counts:
+            counts[key] = count_val
+        total += count_val
+    counts["all"] = total
+
+    return PostStatusCounts(**counts)
 
 
 async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:

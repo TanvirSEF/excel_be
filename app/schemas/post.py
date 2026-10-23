@@ -315,6 +315,15 @@ class PostAdminItem(BaseModel):
     published_at: datetime | None = None
 
 
+class PostStatusCounts(BaseModel):
+    all: int = 0
+    draft: int = 0
+    pending_review: int = 0
+    published: int = 0
+    rejected: int = 0
+    scheduled: int = 0
+
+
 class RejectRequest(RequestModel):
     reason: str = Field(min_length=1, max_length=500)
 
