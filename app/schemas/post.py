@@ -341,3 +341,5 @@ class SeoUpdate(RequestModel):
     meta_description: str | None = Field(default=None, max_length=500)
     canonical_url: str | None = None
     og_image_url: str | None = None
+    focus_keyphrase: str | None = Field(default=None, max_length=100)
+    schema_type: str | None = Field(default=None, max_length=50)

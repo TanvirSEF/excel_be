@@ -145,7 +145,11 @@ async def record_view_by_slug(
 async def get_by_id(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS and post.author_id != user.id:
+    if (
+        user.role not in EDITORS
+        and user.role != UserRole.seo_specialist
+        and post.author_id != user.id
+    ):
         raise PermissionDeniedException()
 
     return await _to_detail(db, post)

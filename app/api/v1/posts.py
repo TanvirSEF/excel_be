@@ -32,6 +32,12 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 WRITERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.technical_writer)
 EDITORS = (UserRole.super_admin, UserRole.senior_editor)
 SEO_ALLOWED = (UserRole.super_admin, UserRole.senior_editor, UserRole.seo_specialist)
+POSTS_READERS = (
+    UserRole.super_admin,
+    UserRole.senior_editor,
+    UserRole.technical_writer,
+    UserRole.seo_specialist,
+)
 
 
 @router.get("", response_model=Page[PostListItem])
@@ -53,7 +59,7 @@ async def admin_list(
     category_id: UUID | None = Query(None),
     author_id: UUID | None = Query(None),
     search: str | None = Query(None),
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*POSTS_READERS)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await post_service.admin_list(
@@ -66,7 +72,7 @@ async def admin_counts(
     category_id: UUID | None = Query(None),
     author_id: UUID | None = Query(None),
     search: str | None = Query(None),
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*POSTS_READERS)),
     db: AsyncSession = Depends(get_db),
 ) -> PostStatusCounts:
     return await post_service.admin_counts(
@@ -77,7 +83,7 @@ async def admin_counts(
 @router.get("/{post_id:uuid}", response_model=PostDetail)
 async def get_by_id(
     post_id: UUID,
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*POSTS_READERS)),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.get_by_id(db, user, post_id)

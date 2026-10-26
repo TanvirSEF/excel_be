@@ -15,13 +15,19 @@ router = APIRouter(prefix="/media", tags=["media"])
 
 WRITERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.technical_writer)
 EDITORS = (UserRole.super_admin, UserRole.senior_editor)
+MEDIA_ALLOWED = (
+    UserRole.super_admin,
+    UserRole.senior_editor,
+    UserRole.technical_writer,
+    UserRole.seo_specialist,
+)
 
 
 @router.post("/upload", response_model=MediaOut, status_code=201)
 async def upload(
     file: UploadFile = File(...),
     folder: str = Form("uncategorized"),
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*MEDIA_ALLOWED)),
     db: AsyncSession = Depends(get_db),
 ) -> Media:
     file_bytes = await media_service.read_upload(file)
@@ -32,7 +38,7 @@ async def upload(
 async def list_media(
     pagination: PaginationParams = Depends(),
     folder: str | None = Query(None),
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*MEDIA_ALLOWED)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await media_service.list_media(db, pagination, folder)
@@ -42,7 +48,7 @@ async def list_media(
 async def update_media(
     media_id: UUID,
     data: MediaUpdate,
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*MEDIA_ALLOWED)),
     db: AsyncSession = Depends(get_db),
 ) -> Media:
     return await media_service.update_media(db, media_id, data)

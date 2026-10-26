@@ -193,12 +193,13 @@ async def test_get_by_id_scopes_writers_to_own_posts(client, admin_token):
     assert response.json()["error"]["code"] == "PERMISSION_DENIED"
 
 
-async def test_get_by_id_forbidden_for_seo_specialist(client, admin_token):
+async def test_get_by_id_allows_seo_specialist(client, admin_token):
     seo_headers = await login(client, "seo@test.com", "SeoPass12345!")
     post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
 
     response = await client.get(f"/api/v1/posts/{post['id']}", headers=seo_headers)
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["id"] == post["id"]
 
 
 async def test_get_by_id_requires_auth(client, admin_token):

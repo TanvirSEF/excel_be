@@ -14,6 +14,12 @@ from app.services import user_service
 router = APIRouter(prefix="/users", tags=["users"])
 
 WRITERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.technical_writer)
+AUTHORS_READERS = (
+    UserRole.super_admin,
+    UserRole.senior_editor,
+    UserRole.technical_writer,
+    UserRole.seo_specialist,
+)
 
 
 @router.get("", response_model=Page[UserOut])
@@ -27,7 +33,7 @@ async def list_users(
 
 @router.get("/authors", response_model=list[UserOut])
 async def list_authors(
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_role(*AUTHORS_READERS)),
     db: AsyncSession = Depends(get_db),
 ) -> list[User]:
     return await user_service.list_authors(db)

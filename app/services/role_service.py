@@ -188,7 +188,10 @@ DEFAULT_ROLE_PERMISSIONS: dict[UserRole, list[str]] = {
     ],
     UserRole.seo_specialist: [
         "overview:view",
+        "posts:view",
         "seo:edit",
+        "media:view",
+        "media:upload",
         "analytics:view",
         "settings:view",
     ],
