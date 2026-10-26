@@ -14,6 +14,7 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     role: UserRole
+    permissions: list[str] = []
     avatar_url: str | None
     bio: str | None
     website_url: str | None

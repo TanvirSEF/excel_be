@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import get_current_user, require_role
+from app.deps.auth_deps import get_current_user, require_permission, require_role
 from app.models import User
 from app.schemas.analytics import OverviewAnalytics, PostAnalytics
 from app.schemas.traffic import TrafficFeedResponse
@@ -25,7 +25,7 @@ async def post_analytics(
 
 @router.get("/overview", response_model=OverviewAnalytics)
 async def overview(
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> OverviewAnalytics:
     return await analytics_service.overview(db)
@@ -38,7 +38,7 @@ async def traffic_feed(
     country_code: str | None = Query(None),
     device_type: str | None = Query(None),
     search: str | None = Query(None),
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> TrafficFeedResponse:
     return await analytics_service.traffic_feed(
@@ -53,7 +53,7 @@ async def traffic_feed(
 
 @router.get("/assistant")
 async def assistant_analytics(
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ):
     return await assistant_service.get_assistant_analytics(db)

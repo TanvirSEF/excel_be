@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import require_role
+from app.deps.auth_deps import require_permission, require_role
 from app.deps.pagination import PaginationParams
 from app.models import Category, User, UserRole
 from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, CategoryWithPosts, ReorderItem
@@ -32,7 +32,7 @@ async def get_by_slug(
 @router.post("", response_model=CategoryOut, status_code=201)
 async def create(
     data: CategoryCreate,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("categories:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Category:
     return await category_service.create(db, data)
@@ -41,7 +41,7 @@ async def create(
 @router.patch("/reorder")
 async def reorder(
     items: list[ReorderItem],
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("categories:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await category_service.reorder(db, items)
@@ -52,7 +52,7 @@ async def reorder(
 async def update(
     category_id: UUID,
     data: CategoryUpdate,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("categories:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Category:
     return await category_service.update(db, category_id, data)
@@ -61,7 +61,7 @@ async def update(
 @router.delete("/{category_id}")
 async def delete(
     category_id: UUID,
-    user: User = Depends(require_role(UserRole.super_admin)),
+    user: User = Depends(require_permission("categories:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await category_service.delete(db, category_id)

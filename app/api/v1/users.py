@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import get_current_user, require_role
+from app.deps.auth_deps import get_current_user, require_permission, require_role
 from app.deps.pagination import PaginationParams
 from app.models import User, UserRole
 from app.schemas.common import Page
@@ -25,7 +25,7 @@ AUTHORS_READERS = (
 @router.get("", response_model=Page[UserOut])
 async def list_users(
     pagination: PaginationParams = Depends(),
-    user: User = Depends(require_role(UserRole.super_admin)),
+    user: User = Depends(require_permission("users:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await user_service.list_users(db, pagination)
@@ -33,7 +33,7 @@ async def list_users(
 
 @router.get("/authors", response_model=list[UserOut])
 async def list_authors(
-    user: User = Depends(require_role(*AUTHORS_READERS)),
+    user: User = Depends(require_permission("posts:view", "posts:manage", "seo:edit")),
     db: AsyncSession = Depends(get_db),
 ) -> list[User]:
     return await user_service.list_authors(db)
@@ -62,7 +62,7 @@ async def update_user(
 async def delete_user(
     user_id: UUID,
     permanent: bool = False,
-    user: User = Depends(require_role(UserRole.super_admin)),
+    user: User = Depends(require_permission("users:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     if permanent:
@@ -75,7 +75,7 @@ async def delete_user(
 @router.delete("/{user_id}/permanent")
 async def delete_user_permanently(
     user_id: UUID,
-    user: User = Depends(require_role(UserRole.super_admin)),
+    user: User = Depends(require_permission("users:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await user_service.delete_user_permanently(db, user, user_id)

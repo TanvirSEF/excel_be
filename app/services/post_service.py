@@ -26,7 +26,7 @@ from app.schemas.post import (
     SeriesContext,
     SeriesLink,
 )
-from app.services import audit_service, cache_service, seo_service, tag_service, view_service
+from app.services import audit_service, cache_service, role_service, seo_service, tag_service, view_service
 from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
 from app.utils.slugify import slugify
@@ -145,11 +145,10 @@ async def record_view_by_slug(
 async def get_by_id(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if (
-        user.role not in EDITORS
-        and user.role != UserRole.seo_specialist
-        and post.author_id != user.id
-    ):
+    perms = await role_service.get_role_permissions(db, user.role)
+    has_read_perm = "*" in perms or "posts:view" in perms or "seo:edit" in perms
+
+    if not has_read_perm and post.author_id != user.id:
         raise PermissionDeniedException()
 
     return await _to_detail(db, post)
@@ -400,7 +399,8 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
 async def soft_delete(db: AsyncSession, user: User, post_id: UUID) -> None:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS:
+    perms = await role_service.get_role_permissions(db, user.role)
+    if "*" not in perms and "posts:delete" not in perms:
         raise PermissionDeniedException()
 
     post.deleted_at = datetime.now(timezone.utc)
@@ -432,7 +432,8 @@ async def submit_review(db: AsyncSession, user: User, post_id: UUID) -> PostDeta
 async def publish(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS:
+    perms = await role_service.get_role_permissions(db, user.role)
+    if "*" not in perms and "posts:publish" not in perms:
         raise PermissionDeniedException()
 
     if post.status != PostStatus.pending_review:
@@ -455,7 +456,8 @@ async def publish(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
 async def reject(db: AsyncSession, user: User, post_id: UUID, reason: str) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS:
+    perms = await role_service.get_role_permissions(db, user.role)
+    if "*" not in perms and "posts:publish" not in perms:
         raise PermissionDeniedException()
 
     if post.status != PostStatus.pending_review:
@@ -477,7 +479,8 @@ async def schedule(
 ) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS:
+    perms = await role_service.get_role_permissions(db, user.role)
+    if "*" not in perms and "posts:publish" not in perms:
         raise PermissionDeniedException()
 
     if post.status not in (PostStatus.draft, PostStatus.pending_review):

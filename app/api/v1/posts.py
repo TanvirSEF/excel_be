@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import get_current_user, require_role
+from app.deps.auth_deps import get_current_user, require_permission, require_role
 from app.deps.client_info import real_client_ip, require_allowed_origin
 from app.deps.pagination import PaginationParams
 from app.deps.rate_limit import comment_rate_limit, view_rate_limit
@@ -59,7 +59,7 @@ async def admin_list(
     category_id: UUID | None = Query(None),
     author_id: UUID | None = Query(None),
     search: str | None = Query(None),
-    user: User = Depends(require_role(*POSTS_READERS)),
+    user: User = Depends(require_permission("posts:view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await post_service.admin_list(
@@ -72,7 +72,7 @@ async def admin_counts(
     category_id: UUID | None = Query(None),
     author_id: UUID | None = Query(None),
     search: str | None = Query(None),
-    user: User = Depends(require_role(*POSTS_READERS)),
+    user: User = Depends(require_permission("posts:view")),
     db: AsyncSession = Depends(get_db),
 ) -> PostStatusCounts:
     return await post_service.admin_counts(
@@ -83,7 +83,7 @@ async def admin_counts(
 @router.get("/{post_id:uuid}", response_model=PostDetail)
 async def get_by_id(
     post_id: UUID,
-    user: User = Depends(require_role(*POSTS_READERS)),
+    user: User = Depends(require_permission("posts:view", "seo:edit")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.get_by_id(db, user, post_id)
@@ -129,7 +129,7 @@ async def list_assets(
 async def attach_asset(
     post_id: UUID,
     file: UploadFile = File(...),
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_permission("posts:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> DownloadableAsset:
     return await asset_service.attach(db, post_id, file)
@@ -158,7 +158,7 @@ async def create_comment(
 @router.post("", response_model=PostDetail, status_code=201)
 async def create(
     data: PostCreate,
-    user: User = Depends(require_role(*WRITERS)),
+    user: User = Depends(require_permission("posts:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.create(db, user, data)
@@ -177,7 +177,7 @@ async def update(
 @router.delete("/{post_id}")
 async def soft_delete(
     post_id: UUID,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:delete")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await post_service.soft_delete(db, user, post_id)
@@ -196,7 +196,7 @@ async def submit_review(
 @router.post("/{post_id}/publish", response_model=PostDetail)
 async def publish(
     post_id: UUID,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:publish")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.publish(db, user, post_id)
@@ -206,7 +206,7 @@ async def publish(
 async def reject(
     post_id: UUID,
     data: RejectRequest,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:publish")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.reject(db, user, post_id, data.reason)
@@ -216,7 +216,7 @@ async def reject(
 async def schedule_post(
     post_id: UUID,
     data: ScheduleRequest,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:publish")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.schedule(db, user, post_id, data.scheduled_at)
@@ -226,7 +226,7 @@ async def schedule_post(
 async def update_seo(
     post_id: UUID,
     data: SeoUpdate,
-    user: User = Depends(require_role(*SEO_ALLOWED)),
+    user: User = Depends(require_permission("seo:edit")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.update_seo(db, post_id, data)
@@ -236,7 +236,7 @@ async def update_seo(
 async def set_trending_pin(
     post_id: UUID,
     data: TrendingPinRequest,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:publish")),
     db: AsyncSession = Depends(get_db),
 ) -> PostAdminItem:
     return await post_service.set_trending_pin(db, post_id, data.pinned)

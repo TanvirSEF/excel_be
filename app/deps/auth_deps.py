@@ -39,3 +39,27 @@ def require_role(*allowed_roles: UserRole):
         return user
 
     return dependency
+
+def require_permission(*required_perms: str):
+    async def dependency(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        if user.role == UserRole.super_admin:
+            return user
+
+        from app.services import role_service
+
+        perms = await role_service.get_role_permissions(db, user.role)
+        if "*" in perms:
+            return user
+
+        if any(p in perms for p in required_perms):
+            return user
+
+        raise PermissionDeniedException(
+            f"Missing required permission: {', '.join(required_perms)}"
+        )
+
+    return dependency
+

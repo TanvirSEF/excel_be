@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import PermissionDeniedException, ValidationException
 from app.models import RolePermission, User, UserRole
-from app.services import audit_service
+from app.services import audit_service, cache_service
 
 PERMISSION_GROUPS = [
     {
@@ -221,9 +221,22 @@ async def get_permission_groups() -> list[dict]:
     return PERMISSION_GROUPS
 
 
+def _role_perms_cache_key(role: UserRole) -> str:
+    role_val = role.value if hasattr(role, "value") else str(role)
+    return f"role:perms:{role_val}"
+
+
 async def get_role_permissions(db: AsyncSession, role: UserRole) -> list[str]:
     if role == UserRole.super_admin:
         return ["*"]
+
+    cache_key = _role_perms_cache_key(role)
+    try:
+        cached = await cache_service.get_json(cache_key)
+        if cached is not None and isinstance(cached, list):
+            return cached
+    except Exception:
+        pass
 
     try:
         results = await db.scalars(
@@ -232,13 +245,16 @@ async def get_role_permissions(db: AsyncSession, role: UserRole) -> list[str]:
             .order_by(RolePermission.permission.asc())
         )
         custom_perms = results.all()
-        if custom_perms:
-            return list(custom_perms)
+        perms = list(custom_perms) if custom_perms else DEFAULT_ROLE_PERMISSIONS.get(role, [])
     except Exception:
-        # Fallback to default if table is not yet migrated
+        perms = DEFAULT_ROLE_PERMISSIONS.get(role, [])
+
+    try:
+        await cache_service.set_json(cache_key, perms, ttl=3600)
+    except Exception:
         pass
 
-    return DEFAULT_ROLE_PERMISSIONS.get(role, [])
+    return perms
 
 
 async def list_roles(db: AsyncSession) -> list[dict]:
@@ -314,6 +330,10 @@ async def update_role_permissions(
     )
 
     await db.commit()
+    try:
+        await cache_service.delete_keys(_role_perms_cache_key(role))
+    except Exception:
+        pass
 
     meta = ROLE_METADATA[role]
     # Get member count

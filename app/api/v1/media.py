@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import require_role
+from app.deps.auth_deps import require_permission, require_role
 from app.deps.pagination import PaginationParams
 from app.models import Media, User, UserRole
 from app.schemas.common import Page
@@ -27,7 +27,7 @@ MEDIA_ALLOWED = (
 async def upload(
     file: UploadFile = File(...),
     folder: str = Form("uncategorized"),
-    user: User = Depends(require_role(*MEDIA_ALLOWED)),
+    user: User = Depends(require_permission("media:upload", "media:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Media:
     file_bytes = await media_service.read_upload(file)
@@ -38,7 +38,7 @@ async def upload(
 async def list_media(
     pagination: PaginationParams = Depends(),
     folder: str | None = Query(None),
-    user: User = Depends(require_role(*MEDIA_ALLOWED)),
+    user: User = Depends(require_permission("media:view", "media:upload", "media:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     return await media_service.list_media(db, pagination, folder)
@@ -48,7 +48,7 @@ async def list_media(
 async def update_media(
     media_id: UUID,
     data: MediaUpdate,
-    user: User = Depends(require_role(*MEDIA_ALLOWED)),
+    user: User = Depends(require_permission("media:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Media:
     return await media_service.update_media(db, media_id, data)
@@ -57,7 +57,7 @@ async def update_media(
 @router.delete("/{media_id}")
 async def delete_media(
     media_id: UUID,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("media:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await media_service.delete_media(db, media_id)

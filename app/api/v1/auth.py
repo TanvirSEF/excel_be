@@ -20,7 +20,7 @@ from app.schemas.auth import (
     UserOut,
     VerifyEmailRequest,
 )
-from app.services import auth_service
+from app.services import auth_service, role_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -117,5 +117,11 @@ async def verify_email(
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: User = Depends(get_current_user)) -> User:
-    return user
+async def me(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    perms = await role_service.get_role_permissions(db, user.role)
+    out = UserOut.model_validate(user)
+    out.permissions = perms
+    return out
