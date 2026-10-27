@@ -2,19 +2,17 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import require_role
+from app.deps.auth_deps import require_permission, require_role
 from app.models import User, UserRole
 from app.schemas.role import PermissionGroupOut, RoleOut, RolePermissionsUpdate
 from app.services import role_service
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
-VIEWERS = (UserRole.super_admin, UserRole.senior_editor)
-
 
 @router.get("", response_model=list[RoleOut])
 async def list_roles(
-    user: User = Depends(require_role(*VIEWERS)),
+    user: User = Depends(require_permission("users:manage")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     return await role_service.list_roles(db)
@@ -22,7 +20,7 @@ async def list_roles(
 
 @router.get("/permissions", response_model=list[PermissionGroupOut])
 async def list_permissions(
-    user: User = Depends(require_role(*VIEWERS)),
+    user: User = Depends(require_permission("users:manage")),
 ) -> list[dict]:
     return await role_service.get_permission_groups()
 

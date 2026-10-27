@@ -24,6 +24,7 @@ class RoleOut(BaseModel):
     is_system: bool = True
     is_editable: bool = True
     permissions: list[str]
+    default_permissions: list[str]
 
 
 class RolePermissionsUpdate(RequestModel):

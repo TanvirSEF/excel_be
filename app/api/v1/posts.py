@@ -168,7 +168,7 @@ async def create(
 async def update(
     post_id: UUID,
     data: PostUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_permission("posts:manage", "seo:edit")),
     db: AsyncSession = Depends(get_db),
 ) -> PostDetail:
     return await post_service.update(db, user, post_id, data)

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import require_role
+from app.deps.auth_deps import require_permission
 from app.models import User
 from app.schemas.traffic_reports import (
     BreakdownReport,
@@ -18,7 +18,6 @@ from app.schemas.traffic_reports import (
     TrafficFilter,
 )
 from app.services import realtime_service, report_service
-from app.services.analytics_service import ANALYTICS_VIEWERS
 from app.services.report_service import Period
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -33,7 +32,7 @@ def report_period(
 
 
 @router.get("/realtime", response_model=RealtimeAnalytics)
-async def realtime(user: User = Depends(require_role(*ANALYTICS_VIEWERS))) -> RealtimeAnalytics:
+async def realtime(user: User = Depends(require_permission("analytics:view"))) -> RealtimeAnalytics:
     return await realtime_service.realtime()
 
 
@@ -42,7 +41,7 @@ async def overview(
     period: Period = Depends(report_period),
     traffic: TrafficFilter = "clean",
     compare: bool = False,
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> OverviewReport:
     return await report_service.overview(db, period, traffic, compare)
@@ -54,7 +53,7 @@ async def breakdown(
     period: Period = Depends(report_period),
     traffic: TrafficFilter = "clean",
     limit: int = Query(10, ge=1, le=report_service.BREAKDOWN_LIMIT),
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> BreakdownReport:
     return await report_service.breakdown(db, period, traffic, dimension, limit)
@@ -66,7 +65,7 @@ async def pages(
     traffic: TrafficFilter = "clean",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> PagesReport:
     return await report_service.pages(db, period, traffic, page, page_size)
@@ -75,7 +74,7 @@ async def pages(
 @router.get("/reports/quality", response_model=QualityReport)
 async def quality(
     period: Period = Depends(report_period),
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> QualityReport:
     return await report_service.quality(db, period)
@@ -87,7 +86,7 @@ async def sessions(
     traffic: TrafficFilter = "clean",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> SessionsReport:
     return await report_service.session_rows(db, period, traffic, page, page_size)
@@ -97,7 +96,7 @@ async def sessions(
 async def events(
     period: Period = Depends(report_period),
     traffic: TrafficFilter = "clean",
-    user: User = Depends(require_role(*ANALYTICS_VIEWERS)),
+    user: User = Depends(require_permission("analytics:view")),
     db: AsyncSession = Depends(get_db),
 ) -> EventsReport:
     return await report_service.events(db, period, traffic)

@@ -14,7 +14,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.deps.pagination import PaginationParams
-from app.models import Category, Post, PostStatus, PostTag, Series, Tag, User, UserRole
+from app.models import Category, Post, PostStatus, PostTag, Series, Tag, User
 from app.schemas.post import (
     PostAdminItem,
     PostStatusCounts,
@@ -31,8 +31,6 @@ from app.utils.reading_time import reading_time_minutes
 from app.utils.sanitize import sanitize_html
 from app.utils.slugify import slugify
 
-EDITORS = (UserRole.super_admin, UserRole.senior_editor)
-WRITERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.technical_writer)
 WRITER_EDITABLE = (PostStatus.draft, PostStatus.pending_review, PostStatus.rejected)
 
 
@@ -145,10 +143,7 @@ async def record_view_by_slug(
 async def get_by_id(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    perms = await role_service.get_role_permissions(db, user.role)
-    has_read_perm = "*" in perms or "posts:view" in perms or "seo:edit" in perms
-
-    if not has_read_perm and post.author_id != user.id:
+    if post.author_id != user.id and not await _can_view_all(db, user):
         raise PermissionDeniedException()
 
     return await _to_detail(db, post)
@@ -165,7 +160,7 @@ async def admin_list(
 ) -> dict:
     conditions = [Post.deleted_at.is_(None)]
 
-    if user.role == UserRole.technical_writer:
+    if not await _can_view_all(db, user):
         conditions.append(Post.author_id == user.id)
     elif author_id is not None:
         conditions.append(Post.author_id == author_id)
@@ -218,7 +213,7 @@ async def admin_counts(
 ) -> PostStatusCounts:
     conditions = [Post.deleted_at.is_(None)]
 
-    if user.role == UserRole.technical_writer:
+    if not await _can_view_all(db, user):
         conditions.append(Post.author_id == user.id)
     elif author_id is not None:
         conditions.append(Post.author_id == author_id)
@@ -273,7 +268,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
             )
 
     author_id = user.id
-    if data.author_id is not None and user.role in EDITORS:
+    if data.author_id is not None and await _is_editor(db, user):
         target_author = await db.scalar(
             select(User).where(User.id == data.author_id, User.is_active.is_(True))
         )
@@ -332,7 +327,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
 async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if not _can_edit(user, post) and not await _has_permission(db, user, "seo:edit"):
+    if not await _can_edit(db, user, post):
         raise PermissionDeniedException()
 
     fields = data.model_fields_set
@@ -347,9 +342,10 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         await _category_or_404(db, data.category_id)
 
     if "author_id" in fields:
-        if user.role not in EDITORS and data.author_id != post.author_id:
+        is_editor = await _is_editor(db, user)
+        if not is_editor and data.author_id != post.author_id:
             raise PermissionDeniedException("Only editors can reassign post author")
-        if user.role in EDITORS and data.author_id is not None and data.author_id != post.author_id:
+        if is_editor and data.author_id is not None and data.author_id != post.author_id:
             target_author = await db.scalar(
                 select(User).where(User.id == data.author_id, User.is_active.is_(True))
             )
@@ -413,7 +409,7 @@ async def soft_delete(db: AsyncSession, user: User, post_id: UUID) -> None:
 async def submit_review(db: AsyncSession, user: User, post_id: UUID) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if user.role not in EDITORS and post.author_id != user.id:
+    if post.author_id != user.id and not await _is_editor(db, user):
         raise PermissionDeniedException()
 
     if post.status not in (PostStatus.draft, PostStatus.rejected):
@@ -658,13 +654,16 @@ async def _unique_slug(db: AsyncSession, base: str) -> str | None:
     return candidate
 
 
-async def _has_permission(db: AsyncSession, user: User, permission: str) -> bool:
-    perms = await role_service.get_role_permissions(db, user.role)
-    return "*" in perms or permission in perms
+async def _is_editor(db: AsyncSession, user: User) -> bool:
+    return await role_service.has_permission(db, user, "posts:publish")
 
 
-def _can_edit(user: User, post: Post) -> bool:
-    if user.role in EDITORS:
+async def _can_view_all(db: AsyncSession, user: User) -> bool:
+    return await role_service.has_permission(db, user, "posts:publish", "seo:edit")
+
+
+async def _can_edit(db: AsyncSession, user: User, post: Post) -> bool:
+    if await role_service.has_permission(db, user, "posts:publish", "seo:edit"):
         return True
     return post.author_id == user.id and post.status in WRITER_EDITABLE
 

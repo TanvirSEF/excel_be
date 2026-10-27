@@ -4,12 +4,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import get_current_user, require_permission, require_role
+from app.deps.auth_deps import get_current_user, require_permission
 from app.models import User
 from app.schemas.analytics import OverviewAnalytics, PostAnalytics
 from app.schemas.traffic import TrafficFeedResponse
 from app.services import analytics_service, assistant_service
-from app.services.analytics_service import ANALYTICS_VIEWERS
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

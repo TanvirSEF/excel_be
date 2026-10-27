@@ -4,14 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.deps.auth_deps import require_role
-from app.models import User, UserRole
+from app.deps.auth_deps import require_permission
+from app.models import User
 from app.schemas.asset import DownloadUrlOut
 from app.services import asset_service
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
-EDITORS = (UserRole.super_admin, UserRole.senior_editor)
 
 
 @router.get("/{asset_id}/download", response_model=DownloadUrlOut)
@@ -26,7 +25,7 @@ async def download(
 @router.delete("/{asset_id}")
 async def delete_asset(
     asset_id: UUID,
-    user: User = Depends(require_role(*EDITORS)),
+    user: User = Depends(require_permission("posts:publish")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await asset_service.delete(db, asset_id)

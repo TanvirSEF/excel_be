@@ -152,6 +152,8 @@ PERMISSION_GROUPS = [
     },
 ]
 
+CUSTOMIZED_MARKER = "__customized__"
+
 ALL_KNOWN_PERMISSIONS = {
     perm["id"]
     for group in PERMISSION_GROUPS
@@ -244,8 +246,11 @@ async def get_role_permissions(db: AsyncSession, role: UserRole) -> list[str]:
             .where(RolePermission.role == role)
             .order_by(RolePermission.permission.asc())
         )
-        custom_perms = results.all()
-        perms = list(custom_perms) if custom_perms else DEFAULT_ROLE_PERMISSIONS.get(role, [])
+        stored = results.all()
+        if stored:
+            perms = [p for p in stored if p != CUSTOMIZED_MARKER]
+        else:
+            perms = DEFAULT_ROLE_PERMISSIONS.get(role, [])
     except Exception:
         perms = DEFAULT_ROLE_PERMISSIONS.get(role, [])
 
@@ -255,6 +260,11 @@ async def get_role_permissions(db: AsyncSession, role: UserRole) -> list[str]:
         pass
 
     return perms
+
+
+async def has_permission(db: AsyncSession, user: User, *permissions: str) -> bool:
+    granted = await get_role_permissions(db, user.role)
+    return "*" in granted or any(p in granted for p in permissions)
 
 
 async def list_roles(db: AsyncSession) -> list[dict]:
@@ -279,6 +289,7 @@ async def list_roles(db: AsyncSession) -> list[dict]:
             "is_system": True,
             "is_editable": role_enum != UserRole.super_admin,
             "permissions": perms,
+            "default_permissions": DEFAULT_ROLE_PERMISSIONS[role_enum],
         })
 
     return roles_list
@@ -313,7 +324,7 @@ async def update_role_permissions(
     )
 
     # Insert new permissions
-    for perm in sanitized_perms:
+    for perm in [*sanitized_perms, CUSTOMIZED_MARKER]:
         db.add(RolePermission(role=role, permission=perm))
 
     audit_service.record(
@@ -351,4 +362,5 @@ async def update_role_permissions(
         "is_system": True,
         "is_editable": True,
         "permissions": sanitized_perms,
+        "default_permissions": DEFAULT_ROLE_PERMISSIONS[role],
     }

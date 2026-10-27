@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException, PermissionDeniedException
-from app.models import Post, PostStatus, PostView, User, UserRole
+from app.models import Post, PostStatus, PostView, User
 from app.schemas.analytics import (
     DailyViews,
     OverviewAnalytics,
@@ -20,9 +20,7 @@ from app.schemas.traffic import (
     TrafficFeedResponse,
     TrafficLogItem,
 )
-
-EDITORS = (UserRole.super_admin, UserRole.senior_editor)
-ANALYTICS_VIEWERS = (UserRole.super_admin, UserRole.senior_editor, UserRole.seo_specialist)
+from app.services import role_service
 
 utc_date = func.date(func.timezone("UTC", PostView.viewed_at))
 
@@ -34,7 +32,7 @@ async def post_analytics(db: AsyncSession, user: User, post_id: UUID) -> PostAna
     if post is None:
         raise NotFoundException("Post not found", code="POST_NOT_FOUND")
 
-    if user.role not in EDITORS and post.author_id != user.id:
+    if post.author_id != user.id and not await role_service.has_permission(db, user, "posts:publish"):
         raise PermissionDeniedException()
 
     now = datetime.now(timezone.utc)
