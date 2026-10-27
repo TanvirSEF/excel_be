@@ -202,6 +202,19 @@ async def test_get_by_id_allows_seo_specialist(client, admin_token):
     assert response.json()["id"] == post["id"]
 
 
+async def test_update_allows_seo_specialist_with_unchanged_author(client, admin_token):
+    seo_headers = await login(client, "seo@test.com", "SeoPass12345!")
+    post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
+
+    response = await client.patch(
+        f"/api/v1/posts/{post['id']}",
+        json={"title": "Edited by SEO", "author_id": post["author_id"]},
+        headers=seo_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Edited by SEO"
+
+
 async def test_get_by_id_requires_auth(client, admin_token):
     post = await create_post(client, admin_token, slug=f"posts-test-{uuid4().hex[:8]}")
 

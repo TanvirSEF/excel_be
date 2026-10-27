@@ -332,7 +332,7 @@ async def create(db: AsyncSession, user: User, data: PostCreate) -> PostDetail:
 async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) -> PostDetail:
     post = await _get_or_404(db, post_id)
 
-    if not _can_edit(user, post):
+    if not _can_edit(user, post) and not await _has_permission(db, user, "seo:edit"):
         raise PermissionDeniedException()
 
     fields = data.model_fields_set
@@ -347,9 +347,9 @@ async def update(db: AsyncSession, user: User, post_id: UUID, data: PostUpdate) 
         await _category_or_404(db, data.category_id)
 
     if "author_id" in fields:
-        if user.role not in EDITORS:
+        if user.role not in EDITORS and data.author_id != post.author_id:
             raise PermissionDeniedException("Only editors can reassign post author")
-        if data.author_id is not None and data.author_id != post.author_id:
+        if user.role in EDITORS and data.author_id is not None and data.author_id != post.author_id:
             target_author = await db.scalar(
                 select(User).where(User.id == data.author_id, User.is_active.is_(True))
             )
@@ -656,6 +656,11 @@ async def _unique_slug(db: AsyncSession, base: str) -> str | None:
         candidate = f"{base}-{counter}"
         counter += 1
     return candidate
+
+
+async def _has_permission(db: AsyncSession, user: User, permission: str) -> bool:
+    perms = await role_service.get_role_permissions(db, user.role)
+    return "*" in perms or permission in perms
 
 
 def _can_edit(user: User, post: Post) -> bool:
