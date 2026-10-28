@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     discord_webhook_url: str = ""
     email_from: str = "Excel Insider <no-reply@excelinsider.com>"
     frontend_url: str = "http://localhost:3000"
+    revalidate_secret: str = ""
 
     r2_account_id: str = ""
     r2_access_key_id: str = ""
