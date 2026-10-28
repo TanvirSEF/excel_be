@@ -7,6 +7,33 @@ from app.services import audit_service, cache_service
 
 PERMISSION_GROUPS = [
     {
+        "id": "courses",
+        "title": "Courses and LMS",
+        "description": "Course authoring, curriculum structuring, lesson content, and student learning management.",
+        "permissions": [
+            {
+                "id": "courses:view",
+                "name": "View Courses",
+                "description": "View courses, draft curricula, and student progress.",
+            },
+            {
+                "id": "courses:manage",
+                "name": "Manage Courses",
+                "description": "Create, edit courses, sections, lessons, exercises, and upload videos.",
+            },
+            {
+                "id": "courses:publish",
+                "name": "Publish Courses",
+                "description": "Publish or unpublish courses and modify visibility.",
+            },
+            {
+                "id": "courses:delete",
+                "name": "Delete Courses",
+                "description": "Delete courses, sections, and lessons.",
+            },
+        ],
+    },
+    {
         "id": "content",
         "title": "Posts & Editorial",
         "description": "Article authoring, reviewing, scheduling, and deletion capabilities.",

@@ -5,6 +5,17 @@ from app.models.base import Base
 from app.models.category import Category
 from app.models.comment import Comment, CommentStatus
 from app.models.contact_message import ContactMessage
+from app.models.course import (
+    Course,
+    CourseEnrollment,
+    CourseLesson,
+    CourseLevel,
+    CourseSection,
+    CourseStatus,
+    LessonAttachment,
+    LessonProgress,
+    LessonType,
+)
 from app.models.downloadable_asset import DownloadableAsset
 from app.models.media import Media
 from app.models.newsletter import NewsletterStatus, NewsletterSubscriber
@@ -28,7 +39,16 @@ __all__ = [
     "Category",
     "Comment",
     "CommentStatus",
+    "Course",
+    "CourseEnrollment",
+    "CourseLesson",
+    "CourseLevel",
+    "CourseSection",
+    "CourseStatus",
     "DownloadableAsset",
+    "LessonAttachment",
+    "LessonProgress",
+    "LessonType",
     "Media",
     "NewsletterStatus",
     "NewsletterSubscriber",

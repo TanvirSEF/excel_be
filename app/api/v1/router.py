@@ -10,6 +10,7 @@ from app.api.v1 import (
     categories,
     comments,
     contact,
+    courses,
     curriculum,
     imports,
     media,
@@ -31,6 +32,7 @@ api_router.include_router(users.router)
 api_router.include_router(roles.router)
 api_router.include_router(categories.router)
 api_router.include_router(posts.router)
+api_router.include_router(courses.router)
 api_router.include_router(assets.router)
 api_router.include_router(tags.router)
 api_router.include_router(series.router)
@@ -46,4 +48,3 @@ api_router.include_router(newsletter.router)
 api_router.include_router(audit.router)
 api_router.include_router(imports.router)
 api_router.include_router(assistant.router)
-

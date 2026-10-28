@@ -68,13 +68,9 @@ async def flush_rate_keys() -> None:
 
 async def _flush(pattern: str) -> None:
     r = get_redis()
-    cursor = 0
-    while True:
-        cursor, keys = await r.scan(cursor, match=pattern, count=100)
-        if keys:
-            await r.delete(*keys)
-        if cursor == 0:
-            return
+    keys = await r.keys(pattern)
+    if keys:
+        await r.delete(*keys)
 
 
 @pytest.fixture

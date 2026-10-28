@@ -12,6 +12,7 @@ from app.core.security import ACCESS, decode_token
 from app.models import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 async def get_current_user(
@@ -30,6 +31,24 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise UnauthorizedException("User not found or inactive")
     return user
+
+
+async def get_optional_current_user(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not token:
+        return None
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != ACCESS:
+            return None
+        user = await db.scalar(select(User).where(User.id == UUID(payload["sub"])))
+        if user is None or not user.is_active:
+            return None
+        return user
+    except Exception:
+        return None
 
 
 def require_role(*allowed_roles: UserRole):
