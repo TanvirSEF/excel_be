@@ -6,9 +6,9 @@ from app.core.redis_client import get_redis
 logger = logging.getLogger(__name__)
 
 CATEGORY_TREE_KEY = "cat:tree"
-POST_TTL = 300
-LIST_TTL = 120
-TREE_TTL = 600
+POST_TTL = 86400
+LIST_TTL = 3600
+TREE_TTL = 86400
 
 
 def post_detail_key(slug: str) -> str:
